@@ -33,25 +33,19 @@ namespace cxxtools
 {
 namespace bin
 {
-RpcServer::RpcServer(EventLoopBase& eventLoop)
-    : _impl(new RpcServerImpl(eventLoop, runmodeChanged, *this))
-{ }
-
-RpcServer::RpcServer(EventLoopBase& eventLoop, const std::string& ip, unsigned short int port, int backlog)
-    : _impl(new RpcServerImpl(eventLoop, runmodeChanged, *this))
+RpcServerImpl* RpcServer::newImpl(EventLoopBase& eventLoop)
 {
-    listen(ip, port, backlog);
-}
-
-RpcServer::RpcServer(EventLoopBase& eventLoop, unsigned short int port, int backlog)
-    : _impl(new RpcServerImpl(eventLoop, runmodeChanged, *this))
-{
-    listen(port, backlog);
+    return new RpcServerImpl(eventLoop, runmodeChanged, *this);
 }
 
 RpcServer::~RpcServer()
 {
     delete _impl;
+}
+
+void RpcServer::listen(const std::string& ip, unsigned short int port, const std::string& certificateFile, const std::string& privateKeyFile, int sslVerifyLevel, const std::string& sslCa)
+{
+    _impl->listen(ip, port, certificateFile, privateKeyFile, sslVerifyLevel, sslCa);
 }
 
 void RpcServer::addService(const ServiceRegistry& service)
@@ -74,16 +68,6 @@ void RpcServer::addService(const std::string& domain, const ServiceRegistry& ser
     }
 }
 
-void RpcServer::listen(const std::string& ip, unsigned short int port, int backlog)
-{
-    _impl->listen(ip, port, backlog);
-}
-
-void RpcServer::listen(unsigned short int port, int backlog)
-{
-    _impl->listen(std::string(), port, backlog);
-}
-
 unsigned RpcServer::minThreads() const
 {
     return _impl->minThreads();
@@ -102,6 +86,11 @@ unsigned RpcServer::maxThreads() const
 void RpcServer::maxThreads(unsigned m)
 {
     _impl->maxThreads(m);
+}
+
+Delegate<bool, const SslCertificate&>& RpcServer::acceptSslCertificate()
+{
+    return _impl->acceptSslCertificate;
 }
 
 }

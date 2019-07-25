@@ -27,8 +27,7 @@
 #include "cxxtools/clock.h"
 #include "cxxtools/selector.h"
 #include "cxxtools/datetime.h"
-#include <limits>
-#include <stdint.h>
+#include <stdexcept>
 
 namespace cxxtools
 {
@@ -102,6 +101,9 @@ const Timespan& Timer::interval() const
 
 void Timer::start(const Milliseconds& interval)
 {
+    if (interval <= Timespan(0))
+        throw std::logic_error("cannot run interval timer without interval");
+
     if (_active)
         stop();
     
@@ -116,8 +118,11 @@ void Timer::start(const Milliseconds& interval)
 }
 
 
-void Timer::start(const DateTime& startTime, const Milliseconds& interval)
+void Timer::start(const DateTime& startTime, const Milliseconds& interval, bool localtime)
 {
+    if (interval <= Timespan(0))
+        throw std::logic_error("cannot run interval timer without interval");
+
     if (_active)
         stop();
     
@@ -125,18 +130,28 @@ void Timer::start(const DateTime& startTime, const Milliseconds& interval)
     _interval = interval;
     _once = false;
 
-    DateTime now = Clock::getLocalTime();
+    Timespan systemTime = Clock::getSystemTicks();
+    struct tm tim;
+    time_t sec = static_cast<time_t>(systemTime.totalSeconds());
+    if (localtime)
+        localtime_r(&sec, &tim);
+    else
+        gmtime_r(&sec, &tim);
+
+    DateTime now(tim.tm_year + 1900, tim.tm_mon + 1, tim.tm_mday,
+                 tim.tm_hour, tim.tm_min, tim.tm_sec,
+                 0, systemTime.totalUSecs() % 1000000);
     if (startTime > now)
     {
-        _finished = Clock::getSystemTicks() + (startTime - now);
+        _finished = systemTime + (startTime - now);
     }
     else
     {
         // startTime =< now
         Timespan elapsed = now - startTime;
-        unsigned ticksElapsed = elapsed.totalMSecs() / interval.totalMSecs();
+        uint64_t ticksElapsed = elapsed.totalMSecs() / interval.totalMSecs();
         DateTime tickTime = startTime + (ticksElapsed + 1) * Timespan(interval);
-        _finished = Clock::getSystemTicks() + (tickTime - now);
+        _finished = systemTime + (tickTime - now);
     }
 
     if (_selector)
@@ -150,14 +165,14 @@ void Timer::after(const Milliseconds& interval)
 }
 
 
-void Timer::at(const DateTime& tickTime)
+void Timer::at(const DateTime& tickTime, bool localtime)
 {
     if (_active)
         stop();
     
     _once = true;
 
-    DateTime now = Clock::getLocalTime();
+    DateTime now = localtime ? DateTime(Clock::getLocalTime()) : DateTime(Clock::getSystemTime());
     if (tickTime >= now)
     {
         _active = true;
@@ -166,6 +181,11 @@ void Timer::at(const DateTime& tickTime)
         if (_selector)
             _selector->onTimerChanged(*this);
     }
+}
+
+void Timer::at(const UtcDateTime& tickTime)
+{
+    at(DateTime(tickTime), false);
 }
 
 
@@ -198,17 +218,49 @@ bool Timer::update(const Milliseconds& now)
 
     Timer::Sentry sentry(_sentry);
 
+    DateTime ts;
+
     while( _active && now >= _finished )
     {
+        Milliseconds currentTs = _finished;
+
+        // We add another interval before sending the signal
+        // since sending might throw an exception. We would
+        // skip recalculating the new time then and may loop.
         _finished += _interval;
 
         if( ! sentry )
             return hasElapsed;
 
-        timeout.send();
-
         if (_once)
             stop();
+
+        timeout.send();
+
+        // We send the signal with datetime only, when someone is
+        // connected since it will take some time to calculate a
+        // DateTime object from milliseconds.
+        if (timeoutts.connectionCount() > 0)
+        {
+            struct tm tim;
+            time_t sec = static_cast<time_t>(currentTs.totalSeconds());
+            localtime_r(&sec, &tim);
+            DateTime dueTime(tim.tm_year + 1900, tim.tm_mon + 1, tim.tm_mday,
+                 tim.tm_hour, tim.tm_min, tim.tm_sec,
+                 0, currentTs.totalUSecs() % 1000000);
+            timeoutts.send(dueTime);
+        }
+
+        if (timeoutUtc.connectionCount() > 0)
+        {
+            struct tm tim;
+            time_t sec = static_cast<time_t>(currentTs.totalSeconds());
+            gmtime_r(&sec, &tim);
+            DateTime dueTime(tim.tm_year + 1900, tim.tm_mon + 1, tim.tm_mday,
+                 tim.tm_hour, tim.tm_min, tim.tm_sec,
+                 0, currentTs.totalUSecs() % 1000000);
+            timeoutUtc.send(dueTime);
+        }
     }
 
     return hasElapsed;

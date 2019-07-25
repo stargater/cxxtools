@@ -31,125 +31,174 @@
 #include "cxxtools/serializationinfo.h"
 #include "dateutils.h"
 #include <stdexcept>
+#include <sstream>
 #include <cctype>
 
 namespace cxxtools
 {
+
+static void throwInvalidTime(const std::string& str, std::string::const_iterator p, const std::string& fmt)
+{
+    throw InvalidTime("string <" + std::string(str.begin(), p) + "(*)" + std::string(p, str.end()) + "> does not match time format <" + fmt + '>');
+}
 
 InvalidTime::InvalidTime()
 : std::invalid_argument("Invalid time")
 { }
 
 Time::Time(const std::string& str, const std::string& fmt)
-: _msecs(0)
+: _usecs(0)
 {
   unsigned hours = 0;
   unsigned minutes = 0;
   unsigned seconds = 0;
-  unsigned mseconds = 0;
+  unsigned useconds = 0;
   bool am = true;
 
   enum {
     state_0,
-    state_fmt
+    state_fmt,
+    state_two
   } state = state_0;
 
   std::string::const_iterator dit = str.begin();
-  std::string::const_iterator it;
-  for (it = fmt.begin(); it != fmt.end(); ++it)
+  try
   {
-    char ch = *it;
-    switch (state)
+    std::string::const_iterator it;
+    for (it = fmt.begin(); it != fmt.end(); ++it)
     {
-      case state_0:
-        if (ch == '%')
-          state = state_fmt;
-        else
-        {
-          if (dit == str.end() || *dit != ch)
-            throw std::runtime_error("string <" + str + "> does not match time format <" + fmt + '>');
-          ++dit;
-        }
-        break;
-
-      case state_fmt:
-        switch (ch)
-        {
-          case 'H':
-          case 'I':
-            hours = getUnsigned(dit, str.end(), 2);
-            break;
-
-          case 'M':
-            minutes = getUnsigned(dit, str.end(), 2);
-            break;
-
-          case 'S':
-            seconds = getUnsigned(dit, str.end(), 2);
-            break;
-
-          case 'j':
-            if (dit != str.end() && *dit == '.')
+      char ch = *it;
+      switch (state)
+      {
+        case state_0:
+          if (ch == '%')
+            state = state_fmt;
+          else
+          {
+            if (ch == '*')
+              skipNonDigit(dit, str.end());
+            else if (ch == '#')
+              skipWord(dit, str.end());
+            else if (dit == str.end() || (*dit != ch && ch != '?'))
+              throwInvalidTime(str, dit, fmt);
+            else
               ++dit;
-            mseconds = getMilliseconds(dit, str.end());
-            break;
+          }
+          break;
 
-          case 'J':
-          case 'K':
-            if (dit != str.end() && *dit == '.')
-            {
-              ++dit;
-              mseconds = getMilliseconds(dit, str.end());
-            }
-            break;
+        case state_fmt:
+          state = state_0;
+          switch (ch)
+          {
+            case 'H':
+            case 'I':
+              hours = getUnsigned(dit, str.end(), 2);
+              break;
 
-          case 'k':
-            mseconds = getMilliseconds(dit, str.end());
-            break;
+            case 'M':
+              minutes = getUnsigned(dit, str.end(), 2);
+              break;
 
-          case 'p':
-            if (dit == str.end()
-              || dit + 1 == str.end()
-              || ((*dit != 'A'
-                && *dit != 'a'
-                && *dit != 'P'
-                && *dit != 'p')
-              || (*(dit + 1) != 'M'
-                &&  *(dit + 1) != 'm')))
-            {
-                throw std::runtime_error("string <" + str + "> does not match time format <" + fmt + '>');
-            }
+            case 'S':
+              seconds = getUnsigned(dit, str.end(), 2);
+              break;
 
-            am = (*dit == 'A' || *dit == 'a');
-            dit += 2;
-            break;
+            case 'j':
+              if (dit != str.end() && *dit == '.')
+                ++dit;
+              useconds = getMicroseconds(dit, str.end(), 6);
+              break;
 
-          default:
-            throw std::runtime_error("invalid time format <" + fmt + '>');
-        }
+            case 'J':
+            case 'U':
+              if (dit != str.end() && *dit == '.')
+              {
+                ++dit;
+                useconds = getMicroseconds(dit, str.end(), 6);
+              }
+              break;
 
-        state = state_0;
-        break;
+            case 'K':
+              if (dit != str.end() && *dit == '.')
+              {
+                ++dit;
+                useconds = getMicroseconds(dit, str.end(), 3);
+              }
+              break;
+
+            case 'k':
+              useconds = getMicroseconds(dit, str.end(), 3);
+              break;
+
+            case 'u':
+              useconds = getMicroseconds(dit, str.end(), 6);
+              break;
+
+            case 'p':
+              if (dit == str.end()
+                || dit + 1 == str.end()
+                || ((*dit != 'A'
+                  && *dit != 'a'
+                  && *dit != 'P'
+                  && *dit != 'p')
+                || (*(dit + 1) != 'M'
+                  &&  *(dit + 1) != 'm')))
+              {
+                throwInvalidTime(str, dit, fmt);
+              }
+
+              am = (*dit == 'A' || *dit == 'a');
+              dit += 2;
+              break;
+
+            case '2':
+              state = state_two;
+              break;
+
+            default:
+              throw InvalidTime("invalid time format <" + fmt + '>');
+          }
+
+          break;
+
+        case state_two:
+          state = state_0;
+          switch (ch)
+          {
+            case 'H':
+            case 'I': hours = getUnsignedF(dit, str.end(), 2); break;
+            case 'M': minutes = getUnsignedF(dit, str.end(), 2); break;
+            case 'S': seconds = getUnsignedF(dit, str.end(), 2); break;
+            default:
+              throw InvalidTime("invalid time format <" + fmt + '>');
+          }
+
+      }
     }
+
+    if (it != fmt.end() || dit != str.end())
+      throwInvalidTime(str, dit, fmt);
+
+    set(am ? hours : hours + 12, minutes, seconds, 0, useconds);
   }
-
-  if (it != fmt.end() || dit != str.end())
-    throw std::runtime_error("string <" + str + "> does not match time format <" + fmt + '>');
-
-  set(am ? hours : hours + 12, minutes, seconds, mseconds);
+  catch (const std::invalid_argument&)
+  {
+    throwInvalidTime(str, dit, fmt);
+  }
 }
 
 std::string Time::toString(const std::string& fmt) const
 {
-  unsigned hours, minutes, seconds, mseconds;
+  unsigned hours, minutes, seconds, mseconds, useconds;
 
-  get(hours, minutes, seconds, mseconds);
+  get(hours, minutes, seconds, mseconds, useconds);
 
   std::string str;
 
   enum {
     state_0,
-    state_fmt
+    state_fmt,
+    state_one
   } state = state_0;
 
   for (std::string::const_iterator it = fmt.begin(); it != fmt.end(); ++it)
@@ -164,50 +213,80 @@ std::string Time::toString(const std::string& fmt) const
         break;
 
       case state_fmt:
+        if (*it != '%')
+          state = state_0;
+
         switch (*it)
         {
-          case 'H': appendD2(str, hours); break;
-          case 'I': appendD2(str, hours % 12); break;
-          case 'M': appendD2(str, minutes); break;
-          case 'S': appendD2(str, seconds); break;
-          case 'j': if (mseconds != 0)
+          case 'H': appendDn(str, 2, hours); break;
+          case 'I': appendDn(str, 2, hours % 12); break;
+          case 'M': appendDn(str, 2, minutes); break;
+          case 'S': appendDn(str, 2, seconds); break;
+          case 'j': if (useconds != 0)
                     {
                       str += '.';
-                      str += (mseconds / 100 + '0');
-                      if (mseconds % 100 != 0)
+                      str += (useconds / 100000 + '0');
+                      useconds %= 100000;
+                      for (unsigned e = 10000; e > 0 && useconds > 0; e /= 10)
                       {
-                        str += (mseconds / 10 % 10 + '0');
-                        if (mseconds % 10 != 0)
-                          str += (mseconds % 10 + '0');
+                        str += (useconds / e + '0');
+                        useconds %= e;
                       }
                     }
                     break;
 
           case 'J': str += '.';
-                    str += (mseconds / 100 + '0');
-                    if (mseconds % 100 != 0)
+                    str += (useconds / 100000 + '0');
+                    useconds %= 100000;
+                    for (unsigned e = 10000; e > 0 && useconds > 0; e /= 10)
                     {
-                      str += (mseconds / 10 % 10 + '0');
-                      if (mseconds % 10 != 0)
-                        str += (mseconds % 10 + '0');
+                      str += (useconds / e + '0');
+                      useconds %= e;
                     }
                     break;
 
-          case 'k': appendD3(str, mseconds);
+          case 'k': appendDn(str, 3, mseconds);
                     break;
 
           case 'K': str += '.';
-                    appendD3(str, mseconds);
+                    appendDn(str, 3, mseconds);
+                    break;
+
+          case 'u': appendDn(str, 6, useconds);
+                    break;
+
+          case 'U': str += '.';
+                    appendDn(str, 6, useconds);
                     break;
 
           case 'p': str += (hours < 12 ? "am" : "pm"); break;
           case 'P': str += (hours < 12 ? "AM" : "PM"); break;
+
+          case '1': state = state_one; break;
+
           default:
             str += '%';
+            str += *it;
         }
 
-        if (*it != '%')
-          state = state_0;
+        break;
+
+      case state_one:
+        state = state_0;
+        switch (*it)
+        {
+          case 'H': appendDn(str, hours < 10 ? 1 : 2, hours); break;
+          case 'I': appendDn(str, hours%12 < 10 ? 1 : 2, hours%12); break;
+          case 'M': appendDn(str, minutes < 10 ? 1 : 2, minutes); break;
+          case 'S': appendDn(str, seconds < 10 ? 1 : 2, seconds); break;
+
+          default:  str += "%1";
+                    str += *it;
+                    if (*it == '%')
+                      state = state_fmt;
+                    break;
+        }
+
         break;
     }
   }
@@ -218,6 +297,33 @@ std::string Time::toString(const std::string& fmt) const
   return str;
 }
 
+Time& Time::operator+=(const Timespan& ts)
+{
+    double microsecs = _usecs + Microseconds(ts);
+    if (microsecs < 0 || microsecs > USecsPerDay)
+    {
+        std::ostringstream s;
+        s << "cannot add " << Microseconds(ts) << " to " << toString();
+        throw std::overflow_error(s.str());
+    }
+
+    _usecs = static_cast<uint64_t>(microsecs);
+    return *this;
+}
+
+Time& Time::operator-=(const Timespan& ts)
+{
+    double microsecs = _usecs - Microseconds(ts);
+    if (microsecs < 0 || microsecs > USecsPerDay)
+    {
+        std::ostringstream s;
+        s << "cannot subtract " << Microseconds(ts) << " from " << toString();
+        throw std::overflow_error(s.str());
+    }
+
+    _usecs = static_cast<uint64_t>(microsecs);
+    return *this;
+}
 
 void operator >>=(const SerializationInfo& si, Time& time)
 {

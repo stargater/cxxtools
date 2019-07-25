@@ -29,30 +29,55 @@
 #include <cxxtools/bin/deserializer.h>
 #include <cxxtools/bin/parser.h>
 #include <cxxtools/serializationerror.h>
+#include <cxxtools/log.h>
+
+#include <sstream>
+
+log_define("cxxtools.bin.deserializer")
 
 namespace cxxtools
 {
 namespace bin
 {
 
-void Deserializer::read(std::istream& in)
+Deserializer::Deserializer(const char* data, size_t size)
 {
     begin();
-    _parser.begin(*this);
 
-    std::streambuf::int_type ch;
-    while ((ch = in.rdbuf()->sbumpc()) != std::streambuf::traits_type::eof())
-        if (_parser.advance(ch) == true)
-            return;
+    std::stringbuf in(std::string(data, size));
+    if (_parser.advance(in) && !in.in_avail())
+    {
+        _parser.finish();
+        return;
+    }
 
-    in.setstate(std::ios::eofbit);
-    SerializationError::doThrow("binary deserialization failed");
+    SerializationError::doThrow("binary deserialization failed - unexpected eof");
 }
 
-void Deserializer::begin()
+void Deserializer::read(std::istream& in)
+{
+    log_trace("read from input stream");
+
+    begin();
+
+    while (in.rdbuf()->sgetc() != std::streambuf::traits_type::eof())
+    {
+        log_debug("call advance - in_avail=" << in.rdbuf()->in_avail() << " ch=" << in.rdbuf()->sgetc());
+        if (_parser.advance(*in.rdbuf(), true))
+        {
+            _parser.finish();
+            return;
+        }
+    }
+
+    in.setstate(std::ios::eofbit);
+    SerializationError::doThrow("binary deserialization failed - unexpected eof");
+}
+
+void Deserializer::begin(bool resetDictionary)
 {
     cxxtools::Deserializer::begin();
-    _parser.begin(*this);
+    _parser.begin(*this, resetDictionary);
 }
 
 }

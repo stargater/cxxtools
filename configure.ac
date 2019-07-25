@@ -1,4 +1,4 @@
-AC_INIT(cxxtools, 2.2rc4, [Tommi Maekitalo <tommi@tntnet.org>])
+AC_INIT(cxxtools, 3.0, [Tommi Maekitalo <tommi@tntnet.org>])
 AM_INIT_AUTOMAKE
 AC_USE_SYSTEM_EXTENSIONS
 
@@ -6,7 +6,7 @@ LT_INIT([disable-static])
 
 AC_PREREQ([2.5.9])
 
-abi_current=9
+abi_current=10
 abi_revision=0
 abi_age=0
 sonumber=${abi_current}:${abi_revision}:${abi_age}
@@ -214,6 +214,43 @@ AC_COMPILE_IFELSE(
 AC_SUBST(HAVE_REVERSE_ITERATOR, "$HAVE_REVERSE_ITERATOR")
 AC_SUBST(HAVE_REVERSE_ITERATOR_4, "$HAVE_REVERSE_ITERATOR_4")
 
+AC_COMPILE_IFELSE(
+  [AC_LANG_SOURCE([
+   #include <cxxabi.h>
+   void foo() { try {} catch (const abi::__forced_unwind&) {} }
+  ])],
+  AC_DEFINE(HAVE_ABI_FORCED_UNWIND, 1, [defined if exception abi::__forced_unwind exists]))
+
+#
+# SSL
+#
+AC_ARG_WITH([ssl],
+    AS_HELP_STRING([--with-ssl=yes|no], [build with SSL support]),
+  [ssl_option=$withval],
+  [ssl_option=yes])
+
+AS_IF([test $ssl_option = yes],
+[
+  AC_CHECK_HEADER([openssl/ssl.h],
+      [
+        AC_MSG_RESULT([building with ssl support])
+        AC_DEFINE(WITH_SSL, [], [Define to build with openssl])
+        AC_COMPILE_IFELSE(
+            [AC_LANG_SOURCE([
+                #include <openssl/asn1.h>
+                ASN1_TIME* t;
+                void foo() { ASN1_TIME_diff(0, 0, t, t); }
+            ])],
+            [AC_DEFINE(HAVE_ASN1_TIME_diff, [], [Defined when openssl supports ASN1_TIME_diff (openssl 1.0.2)])],
+            []
+        )
+      ],
+      AC_MSG_ERROR([header for openssl not found; install openssl developent package or use --without-ssl])
+      )
+])
+
+AM_CONDITIONAL(MAKE_OPENSSL, test $ssl_option = yes)
+
 AC_ARG_ENABLE([demos],
   AS_HELP_STRING([--disable-demos], [disable building demos]),
   [enable_demos=$enableval],
@@ -239,7 +276,10 @@ AC_CONFIG_FILES([
   src/bin/Makefile
   src/json/Makefile
   include/Makefile
+  tools/Makefile
   demo/Makefile
+  demo/async/Makefile
+  demo/ssl/Makefile
   test/Makefile
   ])
 

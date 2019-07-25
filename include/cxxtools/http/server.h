@@ -30,6 +30,7 @@
 #define cxxtools_Http_Server_h
 
 #include <cxxtools/signal.h>
+#include <cxxtools/delegate.h>
 #include <cxxtools/timespan.h>
 #include <string>
 
@@ -37,6 +38,7 @@ namespace cxxtools
 {
 
 class EventLoopBase;
+class SslCertificate;
 class Regex;
 
 namespace http
@@ -48,17 +50,48 @@ class ServerImplBase;
 
 class Server
 {
-        Server(const Server& server) { }
-        Server& operator=(const Server& server) { return *this; }
+#if __cplusplus >= 201103L
+        Server(const Server& server) = delete;
+        Server& operator=(const Server& server) = delete;
+#else
+        Server(const Server&) { }
+        Server& operator=(const Server&) { return *this; }
+#endif
+        ServerImplBase* newImpl(EventLoopBase& eventLoop);
 
     public:
-        explicit Server(EventLoopBase& eventLoop);
-        Server(EventLoopBase& eventLoop, const std::string& ip, unsigned short int port, int backlog = 64);
-        Server(EventLoopBase& eventLoop, unsigned short int port, int backlog = 64);
+        explicit Server(EventLoopBase& eventLoop)
+            : _impl(newImpl(eventLoop))
+            { }
+
+        Server(EventLoopBase& eventLoop, const std::string& ip, unsigned short int port, const std::string& certificateFile = std::string(), const std::string& privateKeyFile = std::string(), int sslVerifyLevel = 0, const std::string& sslCa = std::string())
+            : _impl(newImpl(eventLoop))
+            { listen(ip, port, certificateFile, privateKeyFile, sslVerifyLevel, sslCa); }
+
+        Server(EventLoopBase& eventLoop, const std::string& ip, unsigned short int port, const std::string& certificateFile, int sslVerifyLevel, const std::string& sslCa = std::string())
+            : _impl(newImpl(eventLoop))
+            { listen(ip, port, certificateFile, certificateFile, sslVerifyLevel, sslCa); }
+
+        Server(EventLoopBase& eventLoop, unsigned short int port, const std::string& certificateFile = std::string(), const std::string& privateKeyFile = std::string(), int sslVerifyLevel = 0, const std::string& sslCa = std::string())
+            : _impl(newImpl(eventLoop))
+            { listen(port, certificateFile, privateKeyFile, sslVerifyLevel, sslCa); }
+
+        Server(EventLoopBase& eventLoop, unsigned short int port, const std::string& certificateFile, int sslVerifyLevel, const std::string& sslCa = std::string())
+            : _impl(newImpl(eventLoop))
+            { listen(port, certificateFile, certificateFile, sslVerifyLevel, sslCa); }
+
         ~Server();
 
-        void listen(const std::string& ip, unsigned short int port, int backlog = 64);
-        void listen(unsigned short int port, int backlog = 64);
+        /** Listen to the specified ip and port.
+         *
+         *  When a certificate file is given, ssl is enabled. If no private key file is given, the private key
+         *  is expected to be in the certificate file.
+         *
+         *  Multiple listen calls can be made to listen on multiple interfaces or different settings.
+         */
+        void listen(const std::string& ip, unsigned short int port, const std::string& certificateFile = std::string(), const std::string& privateKeyFile = std::string(), int sslVerifyLevel = 0, const std::string& sslCa = std::string());
+        void listen(unsigned short int port, const std::string& certificateFile = std::string(), const std::string& privateKeyFile = std::string(), int sslVerifyLevel = 0, const std::string& sslCa = std::string())
+            { listen(std::string(), port, certificateFile, privateKeyFile, sslVerifyLevel, sslCa); }
 
         void addService(const std::string& url, Service& service);
         void addService(const Regex& url, Service& service);
@@ -87,6 +120,8 @@ class Server
         };
 
         Signal<Runmode> runmodeChanged;
+
+        Delegate<bool, const SslCertificate&>& acceptSslCertificate();
 
     private:
         ServerImplBase* _impl;

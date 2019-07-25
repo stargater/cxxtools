@@ -34,8 +34,6 @@
 #include <cxxtools/net/tcpserver.h>
 #include <cxxtools/log.h>
 
-#include <signal.h>
-
 log_define("cxxtools.bin.rpcserver.impl")
 
 namespace cxxtools
@@ -129,14 +127,16 @@ RpcServerImpl::~RpcServerImpl()
 
 }
 
-void RpcServerImpl::listen(const std::string& ip, unsigned short int port, int backlog)
+void RpcServerImpl::listen(const std::string& ip, unsigned short int port, const std::string& certificateFile, const std::string& privateKeyFile, int sslVerifyLevel, const std::string& sslCa)
 {
     log_info("listen on " << ip << " port " << port);
-    net::TcpServer* listener = new net::TcpServer(ip, port, backlog, net::TcpServer::DEFER_ACCEPT);
+    net::TcpServer* listener = new net::TcpServer(ip, port, 64,
+        net::TcpServer::DEFER_ACCEPT|net::TcpServer::REUSEADDR);
+
     try
     {
         _listener.push_back(listener);
-        _queue.put(new Socket(*this, _serviceRegistry, *listener));
+        _queue.put(new Socket(*this, *listener, certificateFile, privateKeyFile, sslVerifyLevel, sslCa));
     }
     catch (...)
     {
@@ -165,6 +165,8 @@ void RpcServerImpl::start()
 
 void RpcServerImpl::terminate()
 {
+    _eventLoop.processEvents();
+
     MutexLock lock(_threadMutex);
 
     runmode(RpcServer::Terminating);
@@ -258,7 +260,7 @@ void RpcServerImpl::onIdleSocket(const IdleSocketEvent& event)
     socket->inputConnection = connect(socket->inputReady, inputSlot);
 }
 
-void RpcServerImpl::onNoWaitingThreads(const NoWaitingThreadsEvent& event)
+void RpcServerImpl::onNoWaitingThreads(const NoWaitingThreadsEvent& /*event*/)
 {
     MutexLock lock(_threadMutex);
 

@@ -41,7 +41,7 @@ Clock::Clock(const Clock& cl)
         _impl->addRef();
 }
 
-const Clock& Clock::operator=(const Clock& cl)
+Clock& Clock::operator=(const Clock& cl)
 {
     if (_impl != cl._impl)
     {
@@ -63,9 +63,9 @@ Clock::~Clock()
         delete _impl;
 }
 
-void Clock::start()
+Timespan Clock::start()
 {
-    _impl->start();
+    return _impl->start();
 }
 
 Timespan Clock::stop() const
@@ -73,12 +73,12 @@ Timespan Clock::stop() const
     return _impl->stop();
 }
 
-DateTime Clock::getSystemTime()
+UtcDateTime Clock::getSystemTime()
 {
     return ClockImpl::getSystemTime();
 }
 
-DateTime Clock::getLocalTime()
+LocalDateTime Clock::getLocalTime()
 {
     return ClockImpl::getLocalTime();
 }

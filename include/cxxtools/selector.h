@@ -80,8 +80,13 @@ namespace cxxtools {
             friend class Selectable;
             friend class Timer;
 
+#if __cplusplus >= 201103L
+            SelectorBase(SelectorBase&) = delete;
+            SelectorBase& operator=(SelectorBase&) = delete;
+#else
             SelectorBase(SelectorBase&) { }
             SelectorBase& operator=(SelectorBase&) { return *this; }
+#endif
 
         public:
             static const int WaitInfinite = -1;
@@ -133,7 +138,7 @@ namespace cxxtools {
                 number to the method to get a timeout in milliseconds.
 
                 @param msecs timeout
-                @return true on timeout
+                @return false on timeout
             */
             bool wait(Milliseconds msecs = WaitInfinite);
 
@@ -160,15 +165,23 @@ namespace cxxtools {
             */
             void wake();
 
+            /** @brief Wait for activity
+
+                This method executes just the pending events and returns the time
+                when the next timer is due. When there are no active timers a
+                negative timespan is returned.
+             */
+            Timespan waitTimer();
+
         protected:
             //! @brief Default constructor
             SelectorBase();
 
             void onAddTimer(Timer& timer);
 
-            void onRemoveTimer( Timer& timer );
+            void onRemoveTimer(Timer& timer);
 
-            void onTimerChanged( Timer& timer );
+            void onTimerChanged(Timer& timer);
 
             /** @brief A Selectable is added to this %Selector
 
@@ -210,8 +223,6 @@ namespace cxxtools {
 
             //! @internal
             TimerMap _timers;
-
-            void* _reserved;
     };
 
     class Selector : public SelectorBase

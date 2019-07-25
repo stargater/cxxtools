@@ -31,13 +31,12 @@
 
 #include <cxxtools/event.h>
 #include <cxxtools/signal.h>
-#include <cxxtools/mutex.h>
 #include <cxxtools/selector.h>
 #include <cxxtools/eventsink.h>
 #include <cxxtools/timespan.h>
-#include <deque>
 
-namespace cxxtools {
+namespace cxxtools
+{
 
     class Selectable;
 
@@ -59,8 +58,8 @@ namespace cxxtools {
 
             /** @brief Processes all events which are currently in the event queue
             */
-            void processEvents()
-            { this->onProcessEvents(); }
+            void processEvents(unsigned max = 0)
+            { onProcessEvents(max); }
 
             /** @brief Stops the %EventLoop.
             */
@@ -83,9 +82,17 @@ namespace cxxtools {
             */
             Signal<> timeout;
 
+            /** @brief Notifies that all events are processed and the event loop starts waiting.
+             */
+            Signal<> idle;
+
             /** @brief Reports all events
             */
             Signal<const Event&> event;
+
+            /** @brief Emited when the eventloop is started
+            */
+            Signal<> started;
 
             /** @brief Emited when the eventloop is exited
             */
@@ -102,7 +109,7 @@ namespace cxxtools {
 
             virtual void onExit() = 0;
 
-            virtual void onProcessEvents() = 0;
+            virtual void onProcessEvents(unsigned max) = 0;
 
         private:
             Timespan _timeout;
@@ -131,7 +138,7 @@ namespace cxxtools {
         %IODevices and %Timers can be added to an %EventLoop just as to Selector.
         In fact a %Selector is used internally to implement the %EventLoop.
 
-        Since the %EventLoop is a Runnable, it can be easily assigned to a Thread
+        Since the %EventLoop is a Runnable, it can be easily assigned to a thread
         to give it its own event loop.
      */
     class EventLoop : public EventLoopBase
@@ -144,6 +151,17 @@ namespace cxxtools {
             /** @brief Destructs the EventLoop
              */
             virtual ~EventLoop();
+
+            /** Returns the maximum number of events processed per loop cycle.
+                When the loop runs after the specified number of events
+                I/O events are checked.
+             */
+            unsigned eventsPerLoop();
+
+            /** Sets the maximum number of events processed per loop cycle.
+             *  The default is 16.
+             */
+            void eventsPerLoop(unsigned n);
 
         protected:
             virtual void onAdd( Selectable& s );
@@ -162,15 +180,15 @@ namespace cxxtools {
 
             virtual void onExit();
 
-            virtual void onCommitEvent(const Event& event);
+            virtual void onQueueEvent(const Event& event, bool priority);
 
-            virtual void onProcessEvents();
+            virtual void onCommitEvent(const Event& event, bool priority);
+
+            virtual void onProcessEvents(unsigned max);
 
         private:
-            bool _exitLoop;
-            SelectorImpl* _selector;
-            std::deque<Event* > _eventQueue;
-            RecursiveMutex _queueMutex;
+            class Impl;
+            Impl* _impl;
     };
 
 } // namespace cxxtools

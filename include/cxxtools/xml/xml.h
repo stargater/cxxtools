@@ -95,13 +95,21 @@ namespace xml
     template <typename CharType, typename ObjectType>
     std::basic_ostream<CharType>& operator<< (std::basic_ostream<CharType>& out, const XmlOObject<ObjectType>& object)
     {
-      XmlSerializer serializer(out);
+      try
+      {
+        XmlSerializer serializer(out);
 
-      serializer.useIndent(object.beautify());
-      serializer.useEndl(object.beautify());
-      serializer.useAttributes(object.useAttributes());
+        serializer.useIndent(object.beautify());
+        serializer.useEndl(object.beautify());
+        serializer.useAttributes(object.useAttributes());
 
-      serializer.serialize(object.object(), object.name());
+        serializer.serialize(object.object(), object.name());
+      }
+      catch (const std::exception&)
+      {
+        out.setstate(std::ios::failbit);
+        throw;
+      }
 
       return out;
     }
@@ -145,6 +153,7 @@ namespace xml
     {
         ObjectType& _object;
         bool _readAttributes;
+        String _attributePrefix;
 
       public:
         explicit XmlIObject(ObjectType& object)
@@ -158,8 +167,14 @@ namespace xml
         XmlIObject& readAttributes(bool sw)
         { _readAttributes = sw; return *this; }
 
-        bool readAttributes()
+        bool readAttributes() const
         { return _readAttributes; }
+
+        XmlIObject& attributePrefix(const String& p)
+        { _attributePrefix = p; return *this; }
+
+        const String& attributePrefix() const
+        { return _attributePrefix; }
 
     };
 
@@ -168,10 +183,19 @@ namespace xml
     template <typename CharType, typename ObjectType>
     std::basic_istream<CharType>& operator>> (std::basic_istream<CharType>& in, XmlIObject<ObjectType> object)
     {
-      XmlDeserializer deserializer;
-      deserializer.readAttributes(object.readAttributes());
-      deserializer.parse(in);
-      deserializer.deserialize(object.object());
+      try
+      {
+        XmlDeserializer deserializer;
+        deserializer.readAttributes(object.readAttributes());
+        deserializer.attributePrefix(object.attributePrefix());
+        deserializer.parse(in);
+        deserializer.deserialize(object.object());
+      }
+      catch (const std::exception&)
+      {
+        in.setstate(std::ios::failbit);
+        throw;
+      }
       return in;
     }
 

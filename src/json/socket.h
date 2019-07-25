@@ -31,7 +31,6 @@
 
 #include <cxxtools/net/tcpsocket.h>
 #include <cxxtools/iostream.h>
-#include <cxxtools/timer.h>
 #include <cxxtools/connectable.h>
 #include <cxxtools/signal.h>
 #include <cxxtools/method.h>
@@ -41,16 +40,16 @@ namespace cxxtools
 {
 namespace json
 {
-
 class RpcServerImpl;
 
 class Socket : public net::TcpSocket, public Connectable
 {
     public:
-        Socket(RpcServerImpl& server, ServiceRegistry& _serviceRegistry, net::TcpServer& tcpServer);
+        Socket(RpcServerImpl& rpcServerImpl, net::TcpServer& tcpServer, const std::string& certificateFile, const std::string& privateKeyFile, int sslVerifyLevel, const std::string& sslCa);
         explicit Socket(Socket& socket);
 
         void accept();
+        void postAccept();
         bool hasAccepted() const  { return _accepted; }
 
         void setSelector(SelectorBase* s);
@@ -59,6 +58,7 @@ class Socket : public net::TcpSocket, public Connectable
         void onIODeviceInput(IODevice& iodevice);
         void onInput(StreamBuffer& sb);
         bool onOutput(StreamBuffer& sb);
+        bool onAcceptSslCertificate(const SslCertificate& cert);
 
         Signal<Socket&> inputReady;
 
@@ -70,12 +70,16 @@ class Socket : public net::TcpSocket, public Connectable
         Connection timeoutConnection;
 
     private:
+        RpcServerImpl& _rpcServerImpl;
         net::TcpServer& _tcpServer;
-        RpcServerImpl& _server;
+        std::string _certificateFile;
+        std::string _privateKeyFile;
 
         Responder _responder;
         IOStream _stream;
 
+        int _sslVerifyLevel;
+        std::string _sslCa;
         bool _accepted;
 };
 

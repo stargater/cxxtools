@@ -57,18 +57,35 @@ class RpcClientImpl : public RefCounted, public Connectable
     public:
         RpcClientImpl();
 
-        void setSelector(SelectorBase& selector)
-        { selector.add(_socket); }
+        net::TcpSocket& socket()    { return _socket; }
 
-        void prepareConnect(const net::AddrInfo& addrinfo)
+        void setSelector(SelectorBase* selector)
+        {
+            _socket.setSelector(selector);
+        }
+
+        void prepareConnect(const net::AddrInfo& addrinfo, const std::string& sslCertificate)
         {
             _addrInfo = addrinfo;
             _socket.close();
+            _sslCertificate = sslCertificate;
+            _ssl = !sslCertificate.empty();
+        }
+
+        void ssl(bool sw)
+        {
+            _ssl = sw;
         }
 
         void connect();
 
         void close();
+
+        void setSslVerify(int level, const std::string& ca)
+        {
+            _sslVerifyLevel = level;
+            _sslCa = ca;
+        }
 
         void beginCall(IComposer& r, IRemoteProcedure& method, IDecomposer** argv, unsigned argc);
 
@@ -98,6 +115,7 @@ class RpcClientImpl : public RefCounted, public Connectable
     private:
         void prepareRequest(const String& name, IDecomposer** argv, unsigned argc);
         void onConnect(net::TcpSocket& socket);
+        void onSslConnect(net::TcpSocket& socket);
         void onOutput(StreamBuffer& sb);
         void onInput(StreamBuffer& sb);
 
@@ -106,6 +124,10 @@ class RpcClientImpl : public RefCounted, public Connectable
         IOStream _stream;
 
         net::AddrInfo _addrInfo;
+        bool _ssl;
+        std::string _sslCertificate;
+        int _sslVerifyLevel;
+        std::string _sslCa;
         std::string _domain;
 
         // serialization

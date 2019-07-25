@@ -34,8 +34,6 @@
 #include <cxxtools/log.h>
 #include <cxxtools/net/tcpserver.h>
 
-#include <signal.h>
-
 log_define("cxxtools.http.server.impl")
 
 namespace cxxtools
@@ -144,17 +142,22 @@ ServerImpl::~ServerImpl()
     }
 }
 
-void ServerImpl::listen(const std::string& ip, unsigned short int port, int backlog)
+void ServerImpl::listen(const std::string& ip, unsigned short int port, const std::string& certificateFile, const std::string& privateKeyFile, int sslVerifyLevel, const std::string& sslCa)
 {
-    log_debug("listen on " << ip << " port " << port);
-    net::TcpServer* listener = new net::TcpServer(ip, port, backlog, net::TcpServer::DEFER_ACCEPT);
+    log_debug("listen on " << ip << " port " << port << " certificate \"" << certificateFile << "\" private key \"" << privateKeyFile << '"');
+    net::TcpServer* listener = new net::TcpServer(ip, port, 64,
+        net::TcpServer::DEFER_ACCEPT|net::TcpServer::REUSEADDR);
+    Socket* socket = 0;
+
     try
     {
         _listener.push_back(listener);
-        _queue.put(new Socket(*this, *listener));
+        socket = new Socket(*this, *listener, certificateFile, privateKeyFile, sslVerifyLevel, sslCa);
+        _queue.put(socket);
     }
     catch (...)
     {
+        delete socket;
         delete listener;
         throw;
     }
@@ -179,6 +182,8 @@ void ServerImpl::start()
 void ServerImpl::terminate()
 {
     log_trace("terminate");
+
+    _eventLoop.processEvents();
 
     MutexLock lock(_threadMutex);
 
@@ -286,7 +291,7 @@ void ServerImpl::onActiveSocket(const ActiveSocketEvent& event)
     _queue.put(event.socket());
 }
 
-void ServerImpl::onNoWaitingThreads(const NoWaitingThreadsEvent& event)
+void ServerImpl::onNoWaitingThreads(const NoWaitingThreadsEvent& /*event*/)
 {
     MutexLock lock(_threadMutex);
 

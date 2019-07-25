@@ -92,6 +92,9 @@ class Timespan
         Timespan& operator-=(const Timespan& d)
         { _span -= d._span; return *this; }
 
+        Timespan operator-() const
+        { return Timespan(-_span); }
+
         //! @brief Returns the total number of hours.
         double totalDays() const
         { return double(_span) / 1000 / 1000 / 60 / 60 / 24; }
@@ -285,6 +288,7 @@ class WeakTimespan<1> : public Timespan
 namespace tshelper
 {
     void get(std::istream& in, Timespan& ts, uint64_t res);
+    void get(const SerializationInfo& si, Timespan& ts, uint64_t res);
 }
 /// @endcond
 
@@ -346,20 +350,119 @@ inline Timespan operator / (const Timespan& d, double fac)
     return Timespan(d.totalUSecs() / fac);
 }
 
+/// outputs timespan as number of seconds with the suffix 's'
 std::ostream& operator<< (std::ostream& out, const Timespan& ts);
 
-std::istream& operator>> (std::istream& in, Timespan& ts);
+/// outputs timespan as number of microseconds with the suffix 'us'
+std::ostream& operator<< (std::ostream& out, const Microseconds& ts);
 
-template <uint64_t Resolution>
-std::istream& operator>> (std::istream& in, WeakTimespan<Resolution>& ts)
+/// outputs timespan as number of milliseconds with the suffix 'ms'
+std::ostream& operator<< (std::ostream& out, const Milliseconds& ts);
+
+/// outputs timespan as number of seconds with the suffix 's'
+std::ostream& operator<< (std::ostream& out, const Seconds& ts);
+
+/// outputs timespan as number of minutes with the suffix 'min'
+std::ostream& operator<< (std::ostream& out, const Minutes& ts);
+
+/// outputs timespan as number of hours with the suffix 'h'
+std::ostream& operator<< (std::ostream& out, const Hours& ts);
+
+/// outputs timespan as number of days with the suffix 'd'
+std::ostream& operator<< (std::ostream& out, const Days& ts);
+
+/// reads a whole number from stream and creates a timespan with the number of microseconds
+inline std::istream& operator>> (std::istream& in, Timespan& ts)
 {
-    tshelper::get(in, ts, Resolution);
+    tshelper::get(in, ts, 1);
     return in;
 }
 
-void operator >>=(const SerializationInfo& si, Timespan& timespan);
+/// reads a whole number from stream and creates a timespan with the number of microseconds
+inline std::istream& operator>> (std::istream& in, Microseconds& ts)
+{
+    tshelper::get(in, ts, 1);
+    return in;
+}
+
+/// reads a decimal number from stream and creates a timespan with the number of milliseconds
+inline std::istream& operator>> (std::istream& in, Milliseconds& ts)
+{
+    tshelper::get(in, ts, int64_t(1000));
+    return in;
+}
+
+/// reads a decimal number from stream and creates a timespan with the number of seconds
+inline std::istream& operator>> (std::istream& in, Seconds& ts)
+{
+    tshelper::get(in, ts, int64_t(1000)*1000);
+    return in;
+}
+
+/// reads a decimal number from stream and creates a timespan with the number of minutes
+inline std::istream& operator>> (std::istream& in, Minutes& ts)
+{
+    tshelper::get(in, ts, int64_t(1000)*1000*60);
+    return in;
+}
+
+/// reads a decimal number from stream and creates a timespan with the number of hours
+inline std::istream& operator>> (std::istream& in, Hours& ts)
+{
+    tshelper::get(in, ts, int64_t(1000)*1000*60*60);
+    return in;
+}
+
+/// reads a decimal number from stream and creates a timespan with the number of days
+inline std::istream& operator>> (std::istream& in, Days& ts)
+{
+    tshelper::get(in, ts, int64_t(1000)*1000*60*60*24);
+    return in;
+}
+
+inline void operator >>=(const SerializationInfo& si, Timespan& timespan)
+{
+    tshelper::get(si, timespan, 1);
+}
+
+inline void operator >>=(const SerializationInfo& si, Milliseconds& timespan)
+{
+    tshelper::get(si, timespan, int64_t(1000));
+}
+
+inline void operator >>=(const SerializationInfo& si, Seconds& timespan)
+{
+    tshelper::get(si, timespan, int64_t(1000)*1000);
+}
+
+inline void operator >>=(const SerializationInfo& si, Minutes& timespan)
+{
+    tshelper::get(si, timespan, int64_t(1000)*1000*60);
+}
+
+inline void operator >>=(const SerializationInfo& si, Hours& timespan)
+{
+    tshelper::get(si, timespan, int64_t(1000)*1000*60*60);
+}
+
+inline void operator >>=(const SerializationInfo& si, Days& timespan)
+{
+    tshelper::get(si, timespan, int64_t(1000)*1000*60*60*24);
+}
 
 void operator <<=(SerializationInfo& si, const Timespan& timespan);
+
+void operator <<=(SerializationInfo& si, const Microseconds& timespan);
+
+void operator <<=(SerializationInfo& si, const Milliseconds& timespan);
+
+void operator <<=(SerializationInfo& si, const Seconds& timespan);
+
+void operator <<=(SerializationInfo& si, const Minutes& timespan);
+
+void operator <<=(SerializationInfo& si, const Hours& timespan);
+
+void operator <<=(SerializationInfo& si, const Days& timespan);
 
 } // namespace cxxtools
 

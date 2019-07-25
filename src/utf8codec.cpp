@@ -26,7 +26,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 #include "cxxtools/utf8codec.h"
-#include <cxxtools/conversionerror.h>
+#include <cstring>
 
 #define byteMask 0xBF
 #define byteMark 0x80
@@ -143,6 +143,23 @@ Utf8Codec::Utf8Codec(size_t ref)
 {}
 
 
+namespace
+{
+    inline unsigned short numBytes(const MBState& s, const char* fromBegin, const char* fromEnd)
+    {
+        return fromEnd - fromBegin + s.n;
+    }
+
+    inline char getByte(const MBState& s, const char* fromBegin, const char* fromEnd, unsigned short n)
+    {
+        if (n < s.n)
+            return s.value.mbytes[n];
+        else
+            return fromBegin[n - s.n];
+    }
+}
+
+
 Utf8Codec::result Utf8Codec::do_in(MBState& s, const char* fromBegin, const char* fromEnd, const char*& fromNext,
                                    Char* toBegin, Char* toEnd, Char*& toNext) const
 {
@@ -150,38 +167,72 @@ Utf8Codec::result Utf8Codec::do_in(MBState& s, const char* fromBegin, const char
     fromNext = fromBegin;
     toNext = toBegin;
 
-    // check for incomplete byte order mark:
-    if (fromEnd - fromBegin < 3 && fromBegin[0] == '\xef')
+    // check for empty input
+    if (fromEnd == fromBegin)
         return ok;
 
-    // skip byte order mark
-    if (fromEnd - fromBegin >= 3
-            && fromBegin[0] == '\xef' && fromBegin[1] == '\xbb' && fromBegin[2] == '\xbf')
+    // check for incomplete byte order mark:
+    if (numBytes(s, fromBegin, fromEnd) < 3)
     {
-        fromNext += 3;
+        if (getByte(s, fromBegin, fromEnd, 0) == '\xef')
+        {
+            while (fromNext < fromEnd)
+                s.value.mbytes[s.n++] = *fromNext++;
+            return ok;
+        }
+    }
+    else
+    {
+        // skip byte order mark
+        if (getByte(s, fromBegin, fromEnd, 0) == '\xef'
+            && getByte(s, fromBegin, fromEnd, 1) == '\xbb'
+            && getByte(s, fromBegin, fromEnd, 2) == '\xbf')
+        {
+            if (s.n <= 3)
+            {
+                fromNext += 3 - s.n;
+                s.n = 0;
+            }
+            else
+            {
+                std::memmove(s.value.mbytes, s.value.mbytes + 3, s.n - 3);
+                s.n -= 3;
+            }
+        }
     }
 
-    while(fromNext < fromEnd) {
-        uint8_t* fnext = (uint8_t *)(fromNext);
-
-        if(toNext >= toEnd) {
+    while (fromNext < fromEnd)
+    {
+        if (toNext >= toEnd)
+        {
             retstat = partial;
             break;
         }
+
+        if (s.n < sizeof(s.value.mbytes))
+        {
+            s.value.mbytes[s.n++] = *fromNext++;
+        }
+
+        uint8_t* fnext = reinterpret_cast<uint8_t *>(&s.value.mbytes[0]);
+        uint8_t* fend = fnext + s.n;
 
         const size_t extraBytesToRead = trailingBytesForUTF8[*fnext];
-        if(fromNext + extraBytesToRead >= fromEnd) {
+        if (fnext + extraBytesToRead >= fend)
+        {
             retstat = partial;
             break;
         }
 
-        if( !isLegalUTF8( (const uint8_t*)fnext, extraBytesToRead + 1 ) ) {
+        if( !isLegalUTF8( fnext, extraBytesToRead + 1 ) )
+        {
             retstat = error;
             break;
         }
 
         *toNext = Char(0);
-        switch (extraBytesToRead) {
+        switch (extraBytesToRead)
+        {
             case 5: *toNext = Char((toNext->value() + *fnext++) << 6); // We should never get this for legal UTF-8
             case 4: *toNext = Char((toNext->value() + *fnext++) << 6); // We should never get this for legal UTF-8
             case 3: *toNext = Char((toNext->value() + *fnext++) << 6);
@@ -189,26 +240,29 @@ Utf8Codec::result Utf8Codec::do_in(MBState& s, const char* fromBegin, const char
             case 1: *toNext = Char((toNext->value() + *fnext++) << 6);
             case 0: *toNext = Char((toNext->value() + *fnext++));
         }
+
         *toNext = Char(toNext->value() - offsetsFromUTF8[extraBytesToRead]);
 
         // UTF-16 surrogate values are illegal in UTF-32, and anything
         // over Plane 17 (> 0x10FFFF) is illegal.
-        if(*toNext > MaxLegalUtf32) {
+        if (*toNext > MaxLegalUtf32)
+        {
             *toNext = ReplacementChar;
         }
-        else if(*toNext >= SurHighStart && *toNext <= SurLowEnd) {
+        else if(*toNext >= SurHighStart && *toNext <= SurLowEnd)
+        {
             *toNext = ReplacementChar;
         }
 
+        s.n = 0;
         ++toNext;
-        fromNext += (extraBytesToRead + 1);
     }
 
     return retstat;
 }
 
 
-Utf8Codec::result Utf8Codec::do_out(MBState& s, const Char* fromBegin, const Char* fromEnd, const Char*& fromNext,
+Utf8Codec::result Utf8Codec::do_out(MBState& /*s*/, const Char* fromBegin, const Char* fromEnd, const Char*& fromNext,
                                                   char* toBegin, char* toEnd, char*& toNext) const
 {
     result retstat = ok;
@@ -218,40 +272,49 @@ Utf8Codec::result Utf8Codec::do_out(MBState& s, const Char* fromBegin, const Cha
 
     size_t bytesToWrite;
 
-    while(fromNext < fromEnd) {
+    while(fromNext < fromEnd)
+    {
         ch = *fromNext;
-        if (ch >= SurHighStart && ch <= SurLowEnd) {
+        if (ch >= SurHighStart && ch <= SurLowEnd)
+        {
             retstat = error;
             break;
         }
 
         // Figure out how many bytes the result will require. Turn any
         // illegally large UTF32 things (> Plane 17) into replacement chars.
-        if (ch < Char(0x80)) {
+        if (ch < Char(0x80))
+        {
             bytesToWrite = 1;
         }
-        else if (ch < Char(0x800)) {
+        else if (ch < Char(0x800))
+        {
             bytesToWrite = 2;
         }
-        else if (ch < Char(0x10000)) {
+        else if (ch < Char(0x10000))
+        {
             bytesToWrite = 3;
         }
-        else if (ch <= MaxLegalUtf32) {
+        else if (ch <= MaxLegalUtf32)
+        {
             bytesToWrite = 4;
         }
-        else {
+        else
+        {
             bytesToWrite = 3;
             ch = ReplacementChar;
         }
 
         uint8_t* current = (uint8_t*)(toNext + bytesToWrite);
-        if( current >= (uint8_t*)(toEnd) ) {
+        if( current >= (uint8_t*)(toEnd) )
+        {
             retstat = partial;
             break;
         }
 
         Char::value_type chValue = ch.value();
-        switch(bytesToWrite) { // note: everything falls through...
+        switch(bytesToWrite)
+        { // note: everything falls through...
             case 4: *--current = static_cast<uint8_t>((chValue | byteMark) & byteMask); chValue >>= 6;
             case 3: *--current = static_cast<uint8_t>((chValue | byteMark) & byteMask); chValue >>= 6;
             case 2: *--current = static_cast<uint8_t>((chValue | byteMark) & byteMask); chValue >>= 6;
@@ -266,7 +329,7 @@ Utf8Codec::result Utf8Codec::do_out(MBState& s, const Char* fromBegin, const Cha
 }
 
 
-int Utf8Codec::do_length(MBState& s, const char* fromBegin, const char* fromEnd, size_t max) const
+int Utf8Codec::do_length(MBState& /*s*/, const char* fromBegin, const char* fromEnd, size_t max) const
 {
     const char* fromNext = fromBegin;
     size_t counter = 0;

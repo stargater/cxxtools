@@ -28,6 +28,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 #include "cxxtools/datetime.h"
+#include "cxxtools/clock.h"
 #include "cxxtools/serializationinfo.h"
 #include "dateutils.h"
 #include <stdexcept>
@@ -36,142 +37,205 @@
 namespace cxxtools
 {
 
+static void throwInvalidDate(const std::string& str, std::string::const_iterator p, const std::string& fmt)
+{
+    throw InvalidDate("string <" + std::string(str.begin(), p) + "(*)" + std::string(p, str.end()) + "> does not match datetime format <" + fmt + '>');
+}
+
 DateTime::DateTime(const std::string& str, const std::string& fmt)
 {
   unsigned year = 0;
-  unsigned month = 0;
-  unsigned day = 0;
+  unsigned month = 1;
+  unsigned day = 1;
   unsigned hours = 0;
   unsigned minutes = 0;
   unsigned seconds = 0;
-  unsigned mseconds = 0;
+  unsigned useconds = 0;
   bool am = true;
 
   enum {
     state_0,
-    state_fmt
+    state_fmt,
+    state_two
   } state = state_0;
 
   std::string::const_iterator dit = str.begin();
-  std::string::const_iterator it;
-  for (it = fmt.begin(); it != fmt.end(); ++it)
+  try
   {
-    char ch = *it;
-    switch (state)
+    std::string::const_iterator it;
+    for (it = fmt.begin(); it != fmt.end(); ++it)
     {
-      case state_0:
-        if (ch == '%')
-          state = state_fmt;
-        else
-        {
-          if (dit == str.end() || *dit != ch)
-            throw std::runtime_error("string <" + str + "> does not match datetime format <" + fmt + '>');
-          ++dit;
-        }
-        break;
-
-      case state_fmt:
-        switch (ch)
-        {
-          case 'Y':
-            year = getInt(dit, str.end(), 4);
-            break;
-
-          case 'y':
-            year = getInt(dit, str.end(), 4);
-            year += (year < 50 ? 2000 : 1900);
-            break;
-
-          case 'm':
-            month = getUnsigned(dit, str.end(), 2);
-            break;
-
-          case 'd':
-            day = getUnsigned(dit, str.end(), 2);
-            break;
-
-          case 'H':
-          case 'I':
-            hours = getUnsigned(dit, str.end(), 2);
-            break;
-
-          case 'M':
-            minutes = getUnsigned(dit, str.end(), 2);
-            break;
-
-          case 'S':
-            seconds = getUnsigned(dit, str.end(), 2);
-            break;
-
-          case 'j':
-            if (dit != str.end() && *dit == '.')
+      char ch = *it;
+      switch (state)
+      {
+        case state_0:
+          if (ch == '%')
+            state = state_fmt;
+          else
+          {
+            if (ch == '*')
+              skipNonDigit(dit, str.end());
+            else if (ch == '#')
+              skipWord(dit, str.end());
+            else if (dit == str.end() || (*dit != ch && ch != '?'))
+              throwInvalidDate(str, dit, fmt);
+            else
               ++dit;
-            mseconds = getMilliseconds(dit, str.end());
-            break;
+          }
+          break;
 
-          case 'J':
-          case 'K':
-            if (dit != str.end() && *dit == '.')
-            {
-              ++dit;
-              mseconds = getMilliseconds(dit, str.end());
-            }
-            break;
+        case state_fmt:
+          state = state_0;
+          switch (ch)
+          {
+            case 'Y':
+              year = getInt(dit, str.end(), 4);
+              break;
 
-          case 'k':
-            mseconds = getMilliseconds(dit, str.end());
-            break;
+            case 'y':
+              year = getInt(dit, str.end(), 2);
+              year += (year < 50 ? 2000 : 1900);
+              break;
 
-          case 'p':
-            if (dit == str.end()
-              || dit + 1 == str.end()
-              || ((*dit != 'A'
-                && *dit != 'a'
-                && *dit != 'P'
-                && *dit != 'p')
-              || (*(dit + 1) != 'M'
-                &&  *(dit + 1) != 'm')))
-            {
-                throw std::runtime_error("string <" + str + "> does not match datetime format <" + fmt + '>');
-            }
+            case 'm':
+              month = getUnsigned(dit, str.end(), 2);
+              break;
 
-            am = (*dit == 'A' || *dit == 'a');
-            dit += 2;
-            break;
+            case 'O':
+              month = getMonthFromName(dit, str.end());
+              break;
 
-          default:
-            throw std::runtime_error("invalid datetime format <" + fmt + '>');
-        }
+            case 'd':
+              day = getUnsigned(dit, str.end(), 2);
+              break;
 
-        state = state_0;
-        break;
+            case 'H':
+            case 'I':
+              hours = getUnsigned(dit, str.end(), 2);
+              break;
+
+            case 'M':
+              minutes = getUnsigned(dit, str.end(), 2);
+              break;
+
+            case 'S':
+              seconds = getUnsigned(dit, str.end(), 2);
+              break;
+
+            case 'j':
+              if (dit != str.end() && *dit == '.')
+                ++dit;
+              useconds = getMicroseconds(dit, str.end(), 6);
+              break;
+
+            case 'J':
+            case 'U':
+              if (dit != str.end() && *dit == '.')
+              {
+                ++dit;
+                useconds = getMicroseconds(dit, str.end(), 6);
+              }
+              break;
+
+            case 'K':
+              if (dit != str.end() && *dit == '.')
+              {
+                ++dit;
+                useconds = getMicroseconds(dit, str.end(), 3);
+              }
+              break;
+
+            case 'k':
+              useconds = getMicroseconds(dit, str.end(), 3);
+              break;
+
+            case 'u':
+              useconds = getMicroseconds(dit, str.end(), 6);
+              break;
+
+            case 'p':
+              if (dit == str.end()
+                || dit + 1 == str.end()
+                || ((*dit != 'A'
+                  && *dit != 'a'
+                  && *dit != 'P'
+                  && *dit != 'p')
+                || (*(dit + 1) != 'M'
+                  &&  *(dit + 1) != 'm')))
+              {
+                throwInvalidDate(str, dit, fmt);
+              }
+
+              am = (*dit == 'A' || *dit == 'a');
+              dit += 2;
+              break;
+
+            case '2':
+              state = state_two;
+              break;
+
+            default:
+              throw InvalidDate("invalid datetime format <" + fmt + '>');
+          }
+
+          break;
+
+        case state_two:
+          state = state_0;
+          switch (ch)
+          {
+            case 'm': month = getUnsignedF(dit, str.end(), 2); break;
+            case 'd': day = getUnsignedF(dit, str.end(), 2); break;
+            case 'H':
+            case 'I': hours = getUnsignedF(dit, str.end(), 2); break;
+            case 'M': minutes = getUnsignedF(dit, str.end(), 2); break;
+            case 'S': seconds = getUnsignedF(dit, str.end(), 2); break;
+            default:
+              throw InvalidDate("invalid datetime format <" + fmt + '>');
+          }
+      }
     }
+
+    if (it != fmt.end() || dit != str.end())
+      throwInvalidDate(str, dit, fmt);
+
+    set(year, month, day, am ? hours : hours + 12, minutes, seconds, 0, useconds);
   }
-
-  if (it != fmt.end() || dit != str.end())
-    throw std::runtime_error("string <" + str + "> does not match datetime format <" + fmt + '>');
-
-  set(year, month, day, am ? hours : hours + 12, minutes, seconds, mseconds);
+  catch (const std::invalid_argument&)
+  {
+    throwInvalidDate(str, dit, fmt);
+  }
 }
 
-int64_t DateTime::msecsSinceEpoch() const
+UtcDateTime DateTime::gmtime()
+{
+    return Clock::getSystemTime();
+}
+
+LocalDateTime DateTime::localtime()
+{
+    return Clock::getLocalTime();
+}
+
+Milliseconds DateTime::msecsSinceEpoch() const
 {
     static const DateTime dt(1970, 1, 1, 0, 0, 0);
-    return (*this - dt).totalMSecs();
+    return *this - dt;
 }
 
 std::string DateTime::toString(const std::string& fmt) const
 {
   int year;
-  unsigned month, day, hours, minutes, seconds, mseconds;
+  unsigned month, day, hours, minutes, seconds, mseconds, useconds;
 
-  get(year, month, day, hours, minutes, seconds, mseconds);
+  get(year, month, day, hours, minutes, seconds, mseconds, useconds);
 
   std::string str;
 
   enum {
     state_0,
-    state_fmt
+    state_fmt,
+    state_one
   } state = state_0;
 
   for (std::string::const_iterator it = fmt.begin(); it != fmt.end(); ++it)
@@ -186,56 +250,90 @@ std::string DateTime::toString(const std::string& fmt) const
         break;
 
       case state_fmt:
+        if (*it != '%')
+          state = state_0;
+
         switch (*it)
         {
-          case 'Y': appendD4(str, year); break;
-          case 'y': appendD2(str, year % 100); break;
-          case 'm': appendD2(str, month); break;
-          case 'd': appendD2(str, day); break;
-          case 'w': appendD1(str, dayOfWeek()); break;
-          case 'W': { int dow = dayOfWeek(); appendD1(str, dow == 0 ? 7 : dow); } break;
-          case 'H': appendD2(str, hours); break;
-          case 'I': appendD2(str, hours % 12); break;
-          case 'M': appendD2(str, minutes); break;
-          case 'S': appendD2(str, seconds); break;
-          case 'j': if (mseconds != 0)
+          case 'Y': appendDn(str, 4, year); break;
+          case 'y': appendDn(str, 2, year % 100); break;
+          case 'm': appendDn(str, 2, month); break;
+          case 'O': str += monthnames[month-1]; break;
+          case 'd': appendDn(str, 2, day); break;
+          case 'w': appendDn(str, 1, dayOfWeek()); break;
+          case 'W': { int dow = dayOfWeek(); appendDn(str, 1, dow == 0 ? 7 : dow); } break;
+          case 'N': str += weekdaynames[dayOfWeek()]; break;
+          case 'H': appendDn(str, 2, hours); break;
+          case 'I': appendDn(str, 2, hours % 12); break;
+          case 'M': appendDn(str, 2, minutes); break;
+          case 'S': appendDn(str, 2, seconds); break;
+          case 'j': if (useconds != 0)
                     {
                       str += '.';
-                      str += (mseconds / 100 + '0');
-                      if (mseconds % 100 != 0)
+                      str += (useconds / 100000 + '0');
+                      useconds %= 100000;
+                      for (unsigned e = 10000; e > 0 && useconds > 0; e /= 10)
                       {
-                        str += (mseconds / 10 % 10 + '0');
-                        if (mseconds % 10 != 0)
-                          str += (mseconds % 10 + '0');
+                        str += (useconds / e + '0');
+                        useconds %= e;
                       }
                     }
                     break;
 
           case 'J': str += '.';
-                    str += (mseconds / 100 + '0');
-                    if (mseconds % 100 != 0)
+                    str += (useconds / 100000 + '0');
+                    useconds %= 100000;
+                    for (unsigned e = 10000; e > 0 && useconds > 0; e /= 10)
                     {
-                      str += (mseconds / 10 % 10 + '0');
-                      if (mseconds % 10 != 0)
-                        str += (mseconds % 10 + '0');
+                      str += (useconds / e + '0');
+                      useconds %= e;
                     }
                     break;
 
-          case 'k': appendD3(str, mseconds);
+          case 'k': appendDn(str, 3, mseconds);
                     break;
 
           case 'K': str += '.';
-                    appendD3(str, mseconds);
+                    appendDn(str, 3, mseconds);
+                    break;
+
+          case 'u': appendDn(str, 6, useconds);
+                    break;
+
+          case 'U': str += '.';
+                    appendDn(str, 6, useconds);
                     break;
 
           case 'p': str += (hours < 12 ? "am" : "pm"); break;
           case 'P': str += (hours < 12 ? "AM" : "PM"); break;
+
+          case '1': state = state_one; break;
+
           default:
             str += '%';
+            str += *it;
         }
 
-        if (*it != '%')
-          state = state_0;
+        break;
+
+      case state_one:
+        state = state_0;
+        switch (*it)
+        {
+          case 'd': appendDn(str, day < 10 ? 1 : 2, day); break;
+          case 'm': appendDn(str, month < 10 ? 1 : 2, month); break;
+          case 'H': appendDn(str, hours < 10 ? 1 : 2, hours); break;
+          case 'I': appendDn(str, hours%12 < 10 ? 1 : 2, hours%12); break;
+          case 'M': appendDn(str, minutes < 10 ? 1 : 2, minutes); break;
+          case 'S': appendDn(str, seconds < 10 ? 1 : 2, seconds); break;
+
+          default:  str += "%1";
+                    str += *it;
+                    if (*it == '%')
+                      state = state_fmt;
+                    break;
+        }
+
         break;
     }
   }
@@ -249,41 +347,23 @@ std::string DateTime::toString(const std::string& fmt) const
 
 DateTime& DateTime::operator+=(const Timespan& ts)
 {
-    int64_t totalMSecs = ts.totalMSecs();
-    int64_t days = totalMSecs / Time::MSecsPerDay;
-    int64_t overrun = totalMSecs % Time::MSecsPerDay;
+    int64_t totalUSecs = ts.totalUSecs();
+    int64_t days = totalUSecs / static_cast<int64_t>(Time::USecsPerDay);
+    int64_t overrun = totalUSecs % static_cast<int64_t>(Time::USecsPerDay);
 
-    if( (-overrun) > _time.totalMSecs()  )
+    if ((-overrun) > static_cast<int64_t>(_time.totalUSecs()) )
     {
         days -= 1;
+        overrun += Time::USecsPerDay;
     }
-    else if( overrun + _time.totalMSecs() > Time::MSecsPerDay)
+    else if (overrun + _time.totalUSecs() >= Time::USecsPerDay)
     {
         days += 1;
+        overrun -= Time::USecsPerDay;
     }
 
     _date += static_cast<int>(days);
-    _time += Timespan(overrun * 1000);
-    return *this;
-}
-
-DateTime& DateTime::operator-=(const Timespan& ts)
-{
-    int64_t totalMSecs = ts.totalMSecs();
-    int64_t days = totalMSecs / Time::MSecsPerDay;
-    int64_t overrun = totalMSecs % Time::MSecsPerDay;
-
-    if( overrun > _time.totalMSecs() )
-    {
-        days += 1;
-    }
-    else if(_time.totalMSecs() - overrun > Time::MSecsPerDay)
-    {
-        days -= 1;
-    }
-
-    _date -= static_cast<int>(days);
-    _time -= Timespan( overrun * 1000 );
+    _time += Microseconds(overrun);
     return *this;
 }
 
@@ -292,10 +372,10 @@ Timespan operator-(const DateTime& first, const DateTime& second)
     int64_t dayDiff      = int64_t( first.date().julian() ) -
                                int64_t( second.date().julian() );
 
-    int64_t milliSecDiff = int64_t( first.time().totalMSecs() ) -
-                               int64_t( second.time().totalMSecs() );
+    int64_t microSecDiff = int64_t( first.time().totalUSecs() ) -
+                               int64_t( second.time().totalUSecs() );
 
-    int64_t result = (dayDiff * Time::MSecsPerDay + milliSecDiff) * 1000;
+    int64_t result = (dayDiff * Time::USecsPerDay + microSecDiff);
 
     return Timespan(result);
 }

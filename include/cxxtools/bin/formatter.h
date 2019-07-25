@@ -54,6 +54,9 @@ namespace cxxtools
                 virtual void addValueStdString(const std::string& name, const std::string& type,
                                       const std::string& value);
 
+                virtual void addValueChar(const std::string& name, const std::string& type,
+                                      char value);
+
                 virtual void addValueBool(const std::string& name, const std::string& type,
                                       bool value);
 
@@ -64,6 +67,12 @@ namespace cxxtools
                                       unsigned_type value);
 
                 virtual void addValueFloat(const std::string& name, const std::string& type,
+                                      float value);
+
+                virtual void addValueDouble(const std::string& name, const std::string& type,
+                                      double value);
+
+                virtual void addValueLongDouble(const std::string& name, const std::string& type,
                                       long double value);
 
                 virtual void addNull(const std::string& name, const std::string& type);

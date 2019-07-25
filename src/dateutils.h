@@ -33,13 +33,19 @@
 
 namespace cxxtools
 {
+  extern const char* weekdaynames[7];
+  extern const char* monthnames[12];
+
+  void skipNonDigit(std::string::const_iterator& b, std::string::const_iterator e);
+  void skipWord(std::string::const_iterator& b, std::string::const_iterator e);
   unsigned getUnsigned(std::string::const_iterator& b, std::string::const_iterator e, unsigned digits);
+  unsigned getUnsignedF(std::string::const_iterator& b, std::string::const_iterator e, unsigned digits);
   unsigned getInt(std::string::const_iterator& b, std::string::const_iterator e, unsigned digits);
-  unsigned getMilliseconds(std::string::const_iterator& b, std::string::const_iterator e);
-  void appendD4(std::string& s, unsigned v);
-  void appendD3(std::string& s, unsigned v);
-  void appendD2(std::string& s, unsigned v);
-  void appendD1(std::string& s, unsigned short v);
+  unsigned getMicroseconds(std::string::const_iterator& b, std::string::const_iterator e, unsigned digits);
+  void appendDn(std::string& s, unsigned short n, unsigned v);
+  void appendDn(std::string& s, unsigned short n, int v);
+  unsigned getMonthFromName(std::string::const_iterator& b, std::string::const_iterator e);
+
 }
 
 #endif // CXXTOOLS_DATEUTILS_H

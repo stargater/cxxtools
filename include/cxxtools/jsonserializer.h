@@ -29,9 +29,9 @@
 #ifndef CXXTOOLS_JSONSERIALIZER_H
 #define CXXTOOLS_JSONSERIALIZER_H
 
-#include <cxxtools/textstream.h>
 #include <cxxtools/decomposer.h>
 #include <cxxtools/jsonformatter.h>
+#include <iostream>
 #include <sstream>
 #include <stdexcept>
 
@@ -106,34 +106,24 @@ namespace cxxtools
 
         public:
             JsonSerializer()
-                : _ts(0),
+                : _os(0),
                   _inObject(false)
             {
             }
 
-            explicit JsonSerializer(std::basic_ostream<cxxtools::Char>& ts)
-                : _ts(0),
+            explicit JsonSerializer(std::ostream& os)
+                : _os(0),
                   _inObject(false)
             {
-                _formatter.begin(ts);
+                begin(os);
             }
 
-            explicit JsonSerializer(std::ostream& os,
-                TextCodec<cxxtools::Char, char>* codec = 0);
-
-            ~JsonSerializer()
+            JsonSerializer& begin(std::ostream& os)
             {
-                delete _ts;
-            }
-
-            JsonSerializer& begin(std::basic_ostream<cxxtools::Char>& ts)
-            {
-                _formatter.begin(ts);
+                _os = &os;
+                _formatter.begin(os);
                 return *this;
             }
-
-            JsonSerializer& begin(std::ostream& os,
-                TextCodec<cxxtools::Char, char>* codec = 0);
 
             void finish()
             {
@@ -142,9 +132,10 @@ namespace cxxtools
                     _formatter.finishObject();
                     _inObject = false;
                 }
+
                 _formatter.finish();
-                if (_ts)
-                    _ts->flush();
+
+                _os->flush();
             }
 
             template <typename T>
@@ -173,7 +164,7 @@ namespace cxxtools
                 Decomposer<T> s;
                 s.begin(v);
                 s.format(_formatter);
-                _ts->flush();
+                _os->flush();
                 return *this;
             }
 
@@ -188,6 +179,10 @@ namespace cxxtools
             bool beautify() const     { return _formatter.beautify(); }
 
             void beautify(bool sw)    { _formatter.beautify(sw); }
+
+            bool plainkey() const     { return _formatter.plainkey(); }
+
+            void plainkey(bool sw)    { _formatter.plainkey(sw); }
 
             template <typename T>
             static std::string toString(const T& type, const std::string& name, bool beautify = false)
@@ -204,7 +199,7 @@ namespace cxxtools
 
         private:
             JsonFormatter _formatter;
-            std::basic_ostream<cxxtools::Char>* _ts;
+            std::ostream* _os;
             bool _inObject;
     };
 

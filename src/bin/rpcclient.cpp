@@ -31,6 +31,8 @@
 #include <cxxtools/net/uri.h>
 #include "rpcclientimpl.h"
 
+#include "config.h"
+
 namespace cxxtools
 {
 namespace bin
@@ -47,45 +49,6 @@ RpcClientImpl* RpcClient::getImpl()
     return _impl;
 }
 
-RpcClient::RpcClient(const net::AddrInfo& addr, const std::string& domain)
-    : _impl(0)
-{
-    prepareConnect(addr, domain);
-}
-
-RpcClient::RpcClient(const std::string& addr, unsigned short port, const std::string& domain)
-    : _impl(0)
-{
-    prepareConnect(addr, port, domain);
-}
-
-RpcClient::RpcClient(const net::Uri& uri, const std::string& domain)
-    : _impl(0)
-{
-    prepareConnect(uri, domain);
-}
-
-RpcClient::RpcClient(SelectorBase& selector, const net::AddrInfo& addr, const std::string& domain)
-    : _impl(0)
-{
-    prepareConnect(addr, domain);
-    setSelector(selector);
-}
-
-RpcClient::RpcClient(SelectorBase& selector, const std::string& addr, unsigned short port, const std::string& domain)
-    : _impl(0)
-{
-    prepareConnect(addr, port, domain);
-    setSelector(selector);
-}
-
-RpcClient::RpcClient(SelectorBase& selector, const net::Uri& uri, const std::string& domain)
-    : _impl(0)
-{
-    prepareConnect(uri, domain);
-    setSelector(selector);
-}
-
 RpcClient::RpcClient(const RpcClient& other)
 : _impl(other._impl)
 {
@@ -95,6 +58,9 @@ RpcClient::RpcClient(const RpcClient& other)
 
 RpcClient& RpcClient::operator= (const RpcClient& other)
 {
+    if (_impl == other._impl)
+        return *this;
+
     if (_impl && _impl->release() <= 0)
         delete _impl;
 
@@ -112,24 +78,51 @@ RpcClient::~RpcClient()
         delete _impl;
 }
 
-void RpcClient::prepareConnect(const net::AddrInfo& addrinfo, const std::string& domain_)
+void RpcClient::prepareConnect(const net::AddrInfo& addrinfo, bool ssl)
 {
-    getImpl()->prepareConnect(addrinfo);
-    domain(domain_);
+    getImpl()->prepareConnect(addrinfo, std::string());
+    getImpl()->ssl(ssl);
 }
 
-void RpcClient::prepareConnect(const std::string& host, unsigned short int port, const std::string& domain_)
+void RpcClient::prepareConnect(const net::AddrInfo& addrinfo, const std::string& sslCertificate)
 {
-    prepareConnect(net::AddrInfo(host, port));
-    domain(domain_);
+    getImpl()->prepareConnect(addrinfo, sslCertificate);
 }
 
-void RpcClient::prepareConnect(const net::Uri& uri, const std::string& domain_)
+void RpcClient::prepareConnect(const std::string& host, unsigned short int port, bool ssl)
 {
-    if (uri.protocol() != "http")
-        throw std::runtime_error("only http is supported by http client");
+    prepareConnect(net::AddrInfo(host, port), ssl);
+}
+
+void RpcClient::prepareConnect(const std::string& host, unsigned short int port, const std::string& sslCertificate)
+{
+    prepareConnect(net::AddrInfo(host, port), sslCertificate);
+}
+
+void RpcClient::prepareConnect(const net::Uri& uri)
+{
+#ifdef WITH_SSL
+    if (uri.protocol() != "bin" && uri.protocol() != "bins")
+        throw std::runtime_error("only protocols \"bin\" and \"bins\" is supported by binary rpc client");
+    prepareConnect(net::AddrInfo(uri.host(), uri.port()), uri.protocol() == "bins");
+#else
+    if (uri.protocol() != "bin")
+        throw std::runtime_error("only protocol \"bin\" is supported by binary rpc client");
     prepareConnect(net::AddrInfo(uri.host(), uri.port()));
-    domain(domain_);
+#endif
+}
+
+void RpcClient::prepareConnect(const net::Uri& uri, const std::string& sslCertificate)
+{
+#ifdef WITH_SSL
+    if (uri.protocol() != "bins")
+        throw std::runtime_error("only protocol \"bins\" is supported when ssl certificate is set");
+    prepareConnect(net::AddrInfo(uri.host(), uri.port()), sslCertificate);
+#else
+    if (uri.protocol() != "bin")
+        throw std::runtime_error("only protocol \"bin\" is supported by binary rpc client");
+    prepareConnect(net::AddrInfo(uri.host(), uri.port()));
+#endif
 }
 
 void RpcClient::connect()
@@ -143,9 +136,19 @@ void RpcClient::close()
         _impl->close();
 }
 
-void RpcClient::setSelector(SelectorBase& selector)
+void RpcClient::setSelector(SelectorBase* selector)
 {
     getImpl()->setSelector(selector);
+}
+
+void RpcClient::setSelector(SelectorBase& selector)
+{
+    getImpl()->setSelector(&selector);
+}
+
+void RpcClient::setSslVerify(int level, const std::string& ca)
+{
+    getImpl()->setSslVerify(level, ca);
 }
 
 void RpcClient::beginCall(IComposer& r, IRemoteProcedure& method, IDecomposer** argv, unsigned argc)
@@ -207,6 +210,11 @@ const std::string& RpcClient::domain() const
 void RpcClient::domain(const std::string& p)
 {
     getImpl()->domain(p);
+}
+
+Delegate<bool, const SslCertificate&>& RpcClient::acceptSslCertificate()
+{
+    return getImpl()->socket().acceptSslCertificate;
 }
 
 }

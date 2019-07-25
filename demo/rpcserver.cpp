@@ -111,6 +111,8 @@ int main(int argc, char* argv[])
     cxxtools::Arg<bool> daemonize(argc, argv, 'd');
     cxxtools::Arg<std::string> pidfile(argc, argv, "--pidfile");
 
+    cxxtools::Arg<std::string> sslCert(argc, argv, 'c');
+
     std::cout << "run rpcecho server\n"
               << "http protocol on port "<< port.getValue() << "\n"
               << "binary protocol on port " << bport.getValue() << "\n"
@@ -121,7 +123,7 @@ int main(int argc, char* argv[])
 
     // the http server is instantiated with an ip address and a port number
     // It will be used for xmlrpc and json over http on different urls.
-    cxxtools::http::Server httpServer(loop, ip, port);
+    cxxtools::http::Server httpServer(loop, ip, port, sslCert);
 
     ////////////////////////////////////////////////////////////////////////
     // Xmlrpc
@@ -140,7 +142,7 @@ int main(int argc, char* argv[])
     // Binary rpc
 
     // for the binary rpc server we define a binary server
-    cxxtools::bin::RpcServer binServer(loop, ip, bport);
+    cxxtools::bin::RpcServer binServer(loop, ip, bport, sslCert);
 
     // and register the functions in the server
     binServer.registerFunction("echo", echo);
@@ -150,7 +152,7 @@ int main(int argc, char* argv[])
     // Json rpc
 
     // for the json rpc server we define a json server
-    cxxtools::json::RpcServer jsonServer(loop, ip, jport);
+    cxxtools::json::RpcServer jsonServer(loop, ip, jport, sslCert);
 
     // and register the functions in the server
     jsonServer.registerFunction("echo", echo);

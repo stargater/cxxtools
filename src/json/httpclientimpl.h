@@ -58,9 +58,15 @@ namespace json
         public:
             HttpClientImpl();
 
-            void prepareConnect(const net::AddrInfo& addrinfo, const std::string& url)
+            void prepareConnect(const net::AddrInfo& addrinfo, const std::string& url, bool ssl)
             {
-                _client.prepareConnect(addrinfo);
+                _client.prepareConnect(addrinfo, ssl);
+                _request.url(url);
+            }
+
+            void prepareConnect(const net::AddrInfo& addrinfo, const std::string& url, const std::string& sslCertificate)
+            {
+                _client.prepareConnect(addrinfo, sslCertificate);
                 _request.url(url);
             }
 
@@ -84,9 +90,14 @@ namespace json
                 _client.clearAuth();
             }
 
-            void setSelector(SelectorBase& selector)
+            void setSelector(SelectorBase* selector)
             {
                 _client.setSelector(selector);
+            }
+
+            void setSslVerify(int level, const std::string& ca)
+            {
+                _client.setSslVerify(level, ca);
             }
 
             const std::string& url() const

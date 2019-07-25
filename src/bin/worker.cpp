@@ -28,6 +28,7 @@
 
 #include "worker.h"
 #include "rpcserverimpl.h"
+#include <cxxtools/net/tcpserver.h>
 #include <cxxtools/log.h>
 #include "socket.h"
 
@@ -59,20 +60,30 @@ void Worker::run()
         {
             if (!socket->hasAccepted())
             {
-                // do blocking accept
-                socket->accept();
-                log_debug("connection accepted from " << socket->getPeerAddr());
-
-                if (_server.isTerminating())
+                try
                 {
-                    log_debug("server is terminating - quit thread");
-                    _server._queue.put(socket);
-                    break;
-                }
+                    // do blocking accept
+                    socket->accept();
+                    log_debug("connection accepted from " << socket->getPeerAddr());
 
-                // new connection arrived - create new accept socket
-                log_info("new connection accepted from " << socket->getPeerAddr());
-                _server._queue.put(new Socket(*socket));
+                    if (_server.isTerminating())
+                    {
+                        log_debug("server is terminating - quit thread");
+                        _server._queue.put(socket);
+                        break;
+                    }
+
+                    // new connection arrived - create new accept socket
+                    log_info("new connection accepted from " << socket->getPeerAddr());
+                    _server._queue.put(new Socket(*socket));
+
+                    socket->postAccept();
+                }
+                catch (const std::exception&)
+                {
+                    _server._queue.put(new Socket(*socket));
+                    throw;
+                }
             }
             else if (socket->isConnected())
             {
@@ -110,9 +121,13 @@ void Worker::run()
                 delete socket;
             }
         }
+        catch (const net::AcceptTerminated&)
+        {
+            delete socket;
+        }
         catch (const std::exception& e)
         {
-            log_debug("error occured in device: " << e.what() << "; delete " << static_cast<void*>(socket));
+            log_warn("error occured in device: " << e.what() << "; delete " << static_cast<void*>(socket));
             delete socket;
         }
     }

@@ -35,6 +35,7 @@
 #include "cxxtools/xml/endelement.h"
 #include "cxxtools/http/reply.h"
 #include "cxxtools/utf8codec.h"
+#include "cxxtools/convert.h"
 #include "cxxtools/log.h"
 
 log_define("cxxtools.xmlrpc.responder")
@@ -69,7 +70,7 @@ XmlRpcResponder::~XmlRpcResponder()
 }
 
 
-void XmlRpcResponder::beginRequest(std::istream& is, http::Request& request)
+void XmlRpcResponder::beginRequest(net::TcpSocket& /*socket*/, std::istream& is, http::Request& /*request*/)
 {
     _fault.clear();
     _state = OnBegin;
@@ -78,7 +79,7 @@ void XmlRpcResponder::beginRequest(std::istream& is, http::Request& request)
 }
 
 
-std::size_t XmlRpcResponder::readBody(std::istream& is)
+std::size_t XmlRpcResponder::readBody(std::istream& /*is*/)
 {
     std::size_t n = 0;
 
@@ -122,7 +123,7 @@ std::size_t XmlRpcResponder::readBody(std::istream& is)
 }
 
 
-void XmlRpcResponder::replyError(std::ostream& os, http::Request& request,
+void XmlRpcResponder::replyError(std::ostream& os, http::Request& /*request*/,
                                      http::Reply& reply, const std::exception& ex)
 {
     reply.setHeader("Content-Type", "text/xml");

@@ -49,6 +49,9 @@ namespace xml {
 
 class XmlReaderImpl
 {
+    XmlReaderImpl(const XmlReaderImpl&) { }
+    XmlReaderImpl& operator=(const XmlReaderImpl&) { return *this; }
+
     struct State
     {
         virtual ~State()
@@ -99,55 +102,55 @@ class XmlReaderImpl
             return 0;
         }
 
-        virtual State* onSpace(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSpace(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             syntaxError("unexpected space", reader.line() );
             return this;
         }
 
-        virtual State* onOpenBracket(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onOpenBracket(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             syntaxError("unexpected open bracket", reader.line());
             return this;
         }
 
-        virtual State* onCloseBracket(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onCloseBracket(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             syntaxError("unexpected close bracket", reader.line());
             return this;
         }
 
-        virtual State* onColon(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onColon(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             syntaxError("unexpected colon", reader.line());
             return this;
         }
 
-        virtual State* onSlash(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSlash(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             syntaxError("unexpected slash", reader.line());
             return this;
         }
 
-        virtual State* onEqual(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onEqual(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             syntaxError("unexpected equal", reader.line());
             return this;
         }
 
-        virtual State* onQuote(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onQuote(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             syntaxError("unexpected quote", reader.line());
             return this;
         }
 
-        virtual State* onExclam(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onExclam(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             syntaxError("unexpected exclamation mark", reader.line());
             return this;
         }
 
-        virtual State* onQuest(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onQuest(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             syntaxError("unexpected questionmark", reader.line());
             return this;
@@ -193,7 +196,7 @@ class XmlReaderImpl
             unsigned len = content.length();
 
             if( len > 2 && content[len-2] == ']' &&
-                content[len-2] == ']')
+                content[len-1] == ']')
             {
                 reader._chars.content().resize(len-2);
                 return AfterTag::instance();
@@ -248,6 +251,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnCData _state;
+            log_debug("OnCData");
             return &_state;
         }
     };
@@ -276,6 +280,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static BeforeCData _state;
+            log_debug("BeforeCData");
             return &_state;
         }
     };
@@ -308,6 +313,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnEntityReference _state;
+            log_debug("OnEntityReference");
             return &_state;
         }
     };
@@ -332,6 +338,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnAttributeEntityReference _state;
+            log_debug("OnAttributeEntityReference");
             return &_state;
         }
     };
@@ -351,9 +358,15 @@ class XmlReaderImpl
             return this;
         }
 
-        virtual State* onOpenBracket(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onOpenBracket(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnTag::instance();
+        }
+
+        virtual State* onCloseBracket(cxxtools::Char c, XmlReaderImpl& reader)
+        {
+            reader.appendContent(c);
+            return this;
         }
 
         virtual State* onSlash(cxxtools::Char c, XmlReaderImpl& reader)
@@ -401,6 +414,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnCharacters _state;
+            log_debug("OnCharacters");
             return &_state;
         }
     };
@@ -408,12 +422,12 @@ class XmlReaderImpl
 
     struct AfterEndElementName : public State
     {
-        virtual State* onSpace(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSpace(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return this;
         }
 
-        virtual State* onCloseBracket(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onCloseBracket(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             reader._chars.clear();
             reader._current = &(reader._endElem);
@@ -428,6 +442,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static AfterEndElementName _state;
+            log_debug("AfterEndElementName");
             return &_state;
         }
     };
@@ -435,9 +450,14 @@ class XmlReaderImpl
 
     struct OnEndElementName : public State
     {
-        virtual State* onSpace(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSpace(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return AfterEndElementName::instance();
+        }
+
+        virtual State* onColon(cxxtools::Char c, XmlReaderImpl& reader)
+        {
+            return onAlpha(c, reader);
         }
 
         virtual State* onAlpha(cxxtools::Char c, XmlReaderImpl& reader)
@@ -446,7 +466,7 @@ class XmlReaderImpl
             return this;
         }
 
-        virtual State* onCloseBracket(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onCloseBracket(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             reader._chars.clear();
             reader._current = &(reader._endElem);
@@ -461,6 +481,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnEndElementName _state;
+            log_debug("OnEndElementName");
             return &_state;
         }
     };
@@ -477,6 +498,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnEndElement _state;
+            log_debug("OnEndElement");
             return &_state;
         }
     };
@@ -484,12 +506,12 @@ class XmlReaderImpl
 
     struct OnEmptyElement : public State
     {
-        virtual State* onSpace(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSpace(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return this;
         }
 
-        virtual State* onCloseBracket(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onCloseBracket(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             reader._endElem.name() = reader._startElem.name();
             reader._current = &(reader._endElem);
@@ -504,6 +526,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnEmptyElement _state;
+            log_debug("OnEmptyElement");
             return &_state;
         }
     };
@@ -511,7 +534,7 @@ class XmlReaderImpl
 
     struct OnAttributeValue : public State
     {
-        virtual State* onQuote(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onQuote(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             reader._startElem.addAttribute(reader._attr);
             return BeforeAttribute::instance();
@@ -580,6 +603,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnAttributeValue _state;
+            log_debug("OnAttributeValue");
             return &_state;
         }
     };
@@ -587,12 +611,12 @@ class XmlReaderImpl
 
     struct BeforeAttributeValue : public State
     {
-        virtual State* onSpace(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSpace(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return this;
         }
 
-        virtual State* onQuote(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onQuote(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnAttributeValue::instance();
         }
@@ -600,6 +624,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static BeforeAttributeValue _state;
+            log_debug("BeforeAttributeValue");
             return &_state;
         }
     };
@@ -607,12 +632,12 @@ class XmlReaderImpl
 
     struct AfterAttributeName : public State
     {
-        virtual State* onSpace(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSpace(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return this;
         }
 
-        virtual State* onEqual(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onEqual(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return BeforeAttributeValue::instance();
         }
@@ -620,6 +645,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static AfterAttributeName _state;
+            log_debug("AfterAttributeName");
             return &_state;
         }
     };
@@ -627,12 +653,12 @@ class XmlReaderImpl
 
     struct OnAttributeName : public State
     {
-        virtual State* onSpace(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSpace(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return AfterAttributeName::instance();
         }
 
-        virtual State* onEqual(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onEqual(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return BeforeAttributeValue::instance();
         }
@@ -652,6 +678,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnAttributeName _state;
+            log_debug("OnAttributeName");
             return &_state;
         }
     };
@@ -659,12 +686,12 @@ class XmlReaderImpl
 
     struct BeforeAttribute : public State
     {
-        virtual State* onSpace(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSpace(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return this;
         }
 
-        virtual State* onSlash(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSlash(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             reader._current = &(reader._startElem);
             reader._depth++;
@@ -678,7 +705,7 @@ class XmlReaderImpl
             return OnAttributeName::instance();
         }
 
-        virtual State* onCloseBracket(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onCloseBracket(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             reader._chars.clear();
             reader._current = &(reader._startElem);
@@ -689,6 +716,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static BeforeAttribute _state;
+            log_debug("BeforeAttribute");
             return &_state;
         }
     };
@@ -696,12 +724,17 @@ class XmlReaderImpl
 
     struct OnStartElement : public State
     {
-        virtual State* onSpace(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSpace(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return BeforeAttribute::instance();
         }
 
-        virtual State* onSlash(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onColon(cxxtools::Char c, XmlReaderImpl& reader)
+        {
+            return onAlpha(c, reader);
+        }
+
+        virtual State* onSlash(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             reader._chars.clear();
             reader._current = &(reader._startElem);
@@ -715,7 +748,7 @@ class XmlReaderImpl
             return this;
         }
 
-        virtual State* onCloseBracket(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onCloseBracket(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             reader._chars.clear();
             reader._current = &(reader._startElem);
@@ -726,6 +759,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnStartElement _state;
+            log_debug("OnStartElement");
             return &_state;
         }
     };
@@ -733,7 +767,7 @@ class XmlReaderImpl
 
     struct OnCommentEnd : public State
     {
-        virtual State* onCloseBracket(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onCloseBracket(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             if(reader.depth() == 0)
                 return OnProlog::instance();
@@ -744,6 +778,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnCommentEnd _state;
+            log_debug("OnCommentEnd");
             return &_state;
         }
     };
@@ -751,52 +786,52 @@ class XmlReaderImpl
 
     struct AfterComment : public State
     {
-        virtual State* onSpace(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSpace(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnComment::instance();
         }
 
-        virtual State* onColon(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onColon(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnComment::instance();
         }
 
-        virtual State* onEqual(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onEqual(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnComment::instance();
         }
 
-        virtual State* onQuote(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onQuote(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnComment::instance();
         }
 
-        virtual State* onExclam(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onExclam(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnComment::instance();
         }
 
-        virtual State* onCloseBracket(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onCloseBracket(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnComment::instance();
         }
 
-        virtual State* onOpenBracket(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onOpenBracket(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnComment::instance();
         }
 
-        virtual State* onSlash(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSlash(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnComment::instance();
         }
 
-        virtual State* onQuest(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onQuest(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnComment::instance();
         }
 
-        virtual State* onAlpha(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onAlpha(cxxtools::Char c, XmlReaderImpl& /*reader*/)
         {
             if(c == '-')
                 return OnCommentEnd::instance();
@@ -807,6 +842,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static AfterComment _state;
+            log_debug("AfterComment");
             return &_state;
         }
     };
@@ -814,52 +850,52 @@ class XmlReaderImpl
 
     struct OnComment : public State
     {
-        virtual State* onSpace(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSpace(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return this;
         }
 
-        virtual State* onColon(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onColon(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return this;
         }
 
-        virtual State* onEqual(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onEqual(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return this;
         }
 
-        virtual State* onQuote(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onQuote(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return this;
         }
 
-        virtual State* onExclam(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onExclam(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return this;
         }
 
-        virtual State* onCloseBracket(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onCloseBracket(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return this;
         }
 
-        virtual State* onOpenBracket(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onOpenBracket(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return this;
         }
 
-        virtual State* onSlash(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSlash(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return this;
         }
 
-        virtual State* onQuest(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onQuest(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return this;
         }
 
-        virtual State* onAlpha(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onAlpha(cxxtools::Char c, XmlReaderImpl& /*reader*/)
         {
             if(c == '-')
                 return AfterComment::instance();
@@ -870,6 +906,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnComment _state;
+            log_debug("OnComment");
             return &_state;
         }
     };
@@ -889,6 +926,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static BeforeComment _state;
+            log_debug("BeforeComment");
             return &_state;
         }
     };
@@ -917,6 +955,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static AfterTag _state;
+            log_debug("AfterTag");
             return &_state;
         }
     };
@@ -966,7 +1005,7 @@ class XmlReaderImpl
             return this;
         }
 
-        virtual State* onCloseBracket(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onCloseBracket(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             reader._current = &(reader._docType);
             return OnProlog::instance();
@@ -981,6 +1020,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnDocType _state;
+            log_debug("OnDocType");
             return &_state;
         }
     };
@@ -1009,6 +1049,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static BeforeDocType _state;
+            log_debug("BeforeDocType");
             return &_state;
         }
     };
@@ -1041,6 +1082,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnTagExclam _state;
+            log_debug("OnTagExclam");
             return &_state;
         }
     };
@@ -1048,18 +1090,23 @@ class XmlReaderImpl
 
     struct OnTag : public State
     {
-        virtual State* onQuest(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onQuest(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             reader._procInstr.clear();
             return OnProcessingInstruction::instance();
         }
 
-        virtual State* onExclam(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onExclam(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnTagExclam::instance();
         }
 
-        virtual State* onSlash(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onColon(cxxtools::Char c, XmlReaderImpl& reader)
+        {
+            return onAlpha(c, reader);
+        }
+
+        virtual State* onSlash(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             if( reader._chars.content().length() )
             {
@@ -1085,6 +1132,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnTag _state;
+            log_debug("OnTag");
             return &_state;
         }
     };
@@ -1092,12 +1140,12 @@ class XmlReaderImpl
 
     struct OnEpilog : public State
     {
-        virtual State* onSpace(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSpace(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return this;
         }
 
-        virtual State* onOpenBracket(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onOpenBracket(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnTag::instance();
         }
@@ -1111,6 +1159,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnEpilog _state;
+            log_debug("OnEpilog");
             return &_state;
         }
     };
@@ -1118,12 +1167,12 @@ class XmlReaderImpl
 
     struct OnProlog : public State
     {
-        virtual State* onSpace(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSpace(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return this;
         }
 
-        virtual State* onOpenBracket(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onOpenBracket(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnTag::instance();
         }
@@ -1137,6 +1186,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnProlog _state;
+            log_debug("OnProlog");
             return &_state;
         }
     };
@@ -1144,7 +1194,7 @@ class XmlReaderImpl
 
     struct OnProcessingInstructionEnd : public State
     {
-        virtual State* onCloseBracket(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onCloseBracket(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             reader._current = &(reader._procInstr);
             return AfterTag::instance();
@@ -1153,6 +1203,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnProcessingInstructionEnd _state;
+            log_debug("OnProcessingInstructionEnd");
             return &_state;
         }
     };
@@ -1178,7 +1229,7 @@ class XmlReaderImpl
             return this;
         }
 
-        virtual State* onQuest(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onQuest(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnProcessingInstructionEnd::instance();
         }
@@ -1210,6 +1261,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnProcessingInstructionData _state;
+            log_debug("OnProcessingInstructionData");
             return &_state;
         }
     };
@@ -1217,7 +1269,7 @@ class XmlReaderImpl
 
     struct OnProcessingInstruction : public State
     {
-        virtual State* onSpace(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSpace(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnProcessingInstructionData::instance();
         }
@@ -1231,6 +1283,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnProcessingInstruction _state;
+            log_debug("OnProcessingInstruction");
             return &_state;
         }
     };
@@ -1238,7 +1291,7 @@ class XmlReaderImpl
 
     struct OnXmlDeclValue : public State
     {
-        virtual State* onQuote(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onQuote(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             if(reader._attr.name() == L"version")
             {
@@ -1266,6 +1319,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnXmlDeclValue _state;
+            log_debug("OnXmlDeclValue");
             return &_state;
         }
     };
@@ -1273,12 +1327,12 @@ class XmlReaderImpl
 
     struct OnXmlDeclBeforeValue : public State
     {
-        virtual State* onSpace(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSpace(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return this;
         }
 
-        virtual State* onQuote(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onQuote(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnXmlDeclValue::instance();
         }
@@ -1286,6 +1340,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnXmlDeclBeforeValue _state;
+            log_debug("OnXmlDeclBeforeValue");
             return &_state;
         }
     };
@@ -1293,12 +1348,12 @@ class XmlReaderImpl
 
     struct OnXmlDeclAfterName : public State
     {
-        virtual State* onSpace(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSpace(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return this;
         }
 
-        virtual State* onEqual(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onEqual(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnXmlDeclBeforeValue::instance();
         }
@@ -1306,6 +1361,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnXmlDeclAfterName _state;
+            log_debug("OnXmlDeclAfterName");
             return &_state;
         }
     };
@@ -1313,12 +1369,12 @@ class XmlReaderImpl
 
     struct OnXmlDeclAttr : public State
     {
-        virtual State* onSpace(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSpace(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnXmlDeclAfterName::instance();
         }
 
-        virtual State* onEqual(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onEqual(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnXmlDeclBeforeValue::instance();
         }
@@ -1332,6 +1388,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnXmlDeclAttr _state;
+            log_debug("OnXmlDeclAttr");
             return &_state;
         }
     };
@@ -1339,7 +1396,7 @@ class XmlReaderImpl
 
     struct OnXmlDeclEnd : public State
     {
-        virtual State* onCloseBracket(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onCloseBracket(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnProlog::instance();
         }
@@ -1347,6 +1404,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnXmlDeclEnd _state;
+            log_debug("OnXmlDeclEnd");
             return &_state;
         }
     };
@@ -1354,7 +1412,7 @@ class XmlReaderImpl
 
     struct OnXmlDeclBeforeAttr : public State
     {
-        virtual State* onSpace(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSpace(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return this;
         }
@@ -1366,7 +1424,7 @@ class XmlReaderImpl
             return OnXmlDeclAttr::instance();
         }
 
-        virtual State* onQuest(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onQuest(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnXmlDeclEnd::instance();
         }
@@ -1374,6 +1432,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnXmlDeclBeforeAttr _state;
+            log_debug("OnXmlDeclBeforeAttr");
             return &_state;
         }
     };
@@ -1381,7 +1440,7 @@ class XmlReaderImpl
 
     struct OnXmlDeclName : public State
     {
-        virtual State* onSpace(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSpace(cxxtools::Char /*c*/, XmlReaderImpl& reader)
         {
             if( reader._procInstr.target() == L"xml" )
                 return OnXmlDeclBeforeAttr::instance();
@@ -1404,6 +1463,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnXmlDeclName _state;
+            log_debug("OnXmlDeclName");
             return &_state;
         }
     };
@@ -1421,6 +1481,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnXmlDeclQMark _state;
+            log_debug("OnXmlDeclQMark");
             return &_state;
         }
     };
@@ -1428,12 +1489,12 @@ class XmlReaderImpl
 
     struct OnXmlDecl : public State
     {
-        virtual State* onQuest(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onQuest(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnXmlDeclQMark::instance();
         }
 
-        virtual State* onExclam(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onExclam(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnTagExclam::instance();
         }
@@ -1448,6 +1509,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnXmlDecl _state;
+            log_debug("OnXmlDecl");
             return &_state;
         }
     };
@@ -1455,12 +1517,12 @@ class XmlReaderImpl
 
     struct OnDocumentBegin : public State
     {
-        virtual State* onSpace(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onSpace(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnProlog::instance();
         }
 
-        virtual State* onOpenBracket(cxxtools::Char c, XmlReaderImpl& reader)
+        virtual State* onOpenBracket(cxxtools::Char /*c*/, XmlReaderImpl& /*reader*/)
         {
             return OnXmlDecl::instance();
         }
@@ -1468,6 +1530,7 @@ class XmlReaderImpl
         static State* instance()
         {
             static OnDocumentBegin _state;
+            log_debug("OnDocumentBegin");
             return &_state;
         }
     };
@@ -1480,11 +1543,13 @@ class XmlReaderImpl
             std::basic_streambuf<Char>::int_type c = _textBuffer->sbumpc();
             if (c == std::char_traits<Char>::eof())
             {
+                log_finer("eof");
                 _state = _state->onEof(*this);
                 break;
             }
 
             Char ch = std::char_traits<Char>::to_char_type(c);
+            log_finer("ch='" << ch << '\'');
             _state = _state->onChar(ch, *this);
 
             if (ch == L'\n')
@@ -1620,11 +1685,13 @@ class XmlReaderImpl
             std::basic_streambuf<Char>::int_type c = _textBuffer->sbumpc();
             if (c == std::char_traits<Char>::eof())
             {
+                log_finer("eof");
                 _state = _state->onEof(*this);
                 break;
             }
 
             Char ch = std::char_traits<Char>::to_char_type(c);
+            log_finer("ch='" << ch << '\'');
             _state = _state->onChar(ch, *this);
 
             if (ch == L'\n')
@@ -1643,6 +1710,7 @@ class XmlReaderImpl
         while( ! _current && _textBuffer->in_avail() > 0 )
         {
             Char ch = std::char_traits<Char>::to_char_type(_textBuffer->sbumpc());
+            log_finer("ch='" << ch << '\'');
             _state = _state->onChar(ch, *this);
 
             if (ch == '\n')
@@ -1808,7 +1876,7 @@ const StartElement& XmlReader::nextElement()
         {
             case Node::EndDocument:
             {
-                throw std::logic_error("End of document");
+                throw XmlNoDocument(line());
             }
             case Node::StartElement:
                 found = true;
@@ -1834,7 +1902,7 @@ const Node& XmlReader::nextTag()
         {
             case Node::EndDocument:
             {
-                throw std::logic_error("End of document");
+                throw XmlUnexpectedEndOfDocument(line());
             }
             case Node::StartElement:
             case Node::EndElement:

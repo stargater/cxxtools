@@ -73,6 +73,12 @@ void convert(String& s, int value);
 void convert(String& s, unsigned int value);
 void convert(String& s, long value);
 void convert(String& s, unsigned long value);
+#ifdef HAVE_LONG_LONG
+void convert(String& s, long long value);
+#endif
+#ifdef HAVE_UNSIGNED_LONG_LONG
+void convert(String& s, unsigned long long value);
+#endif
 
 void convert(String& s, float value);
 void convert(String& s, double value);
@@ -148,6 +154,12 @@ void convert(std::string& s, int value);
 void convert(std::string& s, unsigned int value);
 void convert(std::string& s, long value);
 void convert(std::string& s, unsigned long value);
+#ifdef HAVE_LONG_LONG
+void convert(std::string& s, long long value);
+#endif
+#ifdef HAVE_UNSIGNED_LONG_LONG
+void convert(std::string& s, unsigned long long value);
+#endif
 
 void convert(std::string& s, float value);
 void convert(std::string& s, double value);
@@ -542,7 +554,7 @@ inline unsigned long long formatAbs(long long i, bool& isNeg)
 }
 #endif
 
-#ifdef HAVE_UNSIGNEDLONG_LONG
+#ifdef HAVE_UNSIGNED_LONG_LONG
 //! @internal @brief Returns the absolute value of \a i
 inline unsigned long long formatAbs(unsigned long long i, bool& isNeg)
 {
@@ -636,12 +648,12 @@ inline OutIterT putInt(OutIterT it, T i)
 
 
 template <typename OutIterT, typename T, typename FormatT>
-inline OutIterT putFloat(OutIterT it, T d, const FormatT& fmt, int precision)
+inline OutIterT putFloat(OutIterT it, T value, const FormatT& fmt, int precision)
 {
     typedef typename FormatT::CharT CharT;
 
-    // 1. Test for not-a-number with d != d
-    if( d != d ) 
+    // 1. Test for not-a-number with value != value
+    if( value != value ) 
     {
         for(const CharT* nanstr = fmt.nan(); *nanstr != 0; ++nanstr)
         {
@@ -653,13 +665,13 @@ inline OutIterT putFloat(OutIterT it, T d, const FormatT& fmt, int precision)
     }
 
     // 2. check sign
-    if(d < 0.0)
+    if(value < 0.0)
     {
         *it = fmt.minus();
         ++it;
     }
 
-    T num = std::fabs(d);
+    T num = std::fabs(value);
 
     // 3. Test for infinity
     if( num == std::numeric_limits<T>::infinity() ) 
@@ -679,21 +691,21 @@ inline OutIterT putFloat(OutIterT it, T d, const FormatT& fmt, int precision)
         precision = bufsize;
 
     CharT fract[bufsize + 1];
-    fract[bufsize] = CharT('\0');
+    fract[precision] = CharT('\0');
 
     int exp = static_cast<int>(std::floor(std::log10(num))) + 1;
 
-    num *= std::pow(T(10.0), static_cast<int>(precision) - exp);
+    num *= std::pow(T(10.0), precision - exp);
     num += .5;
 
     bool notZero = false;
-    for (unsigned short d = precision; d > 0; --d)
+    for (unsigned short dd = precision; dd > 0; --dd)
     {
-        T n = num / 10.0;
-        T fl = std::floor(n) * 10.0;
+        T n = num / T(10.0);
+        T fl = std::floor(n) * T(10.0);
         unsigned char v = static_cast<unsigned char>(num - fl);
-        notZero |= (v != 0);
-        fract[d - 1] = notZero ? fmt.toChar(v) : CharT('\0');
+        notZero |= (v != 0 && v < 10);
+        fract[dd - 1] = notZero ? fmt.toChar(v) : CharT('\0');
         num = n;
     }
 
@@ -714,21 +726,21 @@ inline OutIterT putFloat(OutIterT it, T d, const FormatT& fmt, int precision)
             ++exp;
         }
 
-        for (int d = 0; fract[d]; ++d)
+        for (int dd = 0; fract[dd]; ++dd)
         {
-            *it = fract[d]; ++it;
+            *it = fract[dd]; ++it;
         }
     }
     else
     {
-        for (int d = 0; fract[d]; ++d)
+        for (int dd = 0; fract[dd]; ++dd)
         {
             if (exp-- == 0)
             {
                 *it = '.';
                 ++it;
             }
-            *it = fract[d]; ++it;
+            *it = fract[dd]; ++it;
         }
 
         while (exp-- > 0)
@@ -742,11 +754,11 @@ inline OutIterT putFloat(OutIterT it, T d, const FormatT& fmt, int precision)
 
 
 template <typename OutIterT, typename T>
-inline OutIterT putFloat(OutIterT it, T d)
+inline OutIterT putFloat(OutIterT it, T value)
 {
-    const int precision = std::numeric_limits<T>::digits10 + 1;
+    const int precision = std::numeric_limits<T>::digits10 - 1;
     FloatFormat<char> fmt;
-    return putFloat(it, d, fmt, precision);
+    return putFloat(it, value, fmt, precision);
 }
 
 
@@ -759,14 +771,17 @@ InIterT getSign(InIterT it, InIterT end, bool& pos, const FormatT& fmt)
     while (it != end && isspace(*it))
         ++it;
 
-    if(*it == fmt.minus())
+    if (it != end)
     {
-        pos = false;
-        ++it;
-    }
-    else if( *it == fmt.plus() )
-    {
-        ++it;
+        if (*it == fmt.minus())
+        {
+            pos = false;
+            ++it;
+        }
+        else if ( *it == fmt.plus() )
+        {
+            ++it;
+        }
     }
 
     return it;
@@ -804,10 +819,9 @@ InIterT getInt(InIterT it, InIterT end, bool& ok, T& n, const FormatT& fmt)
     // parse number
     UnsignedInt u = 0;
     const UnsignedInt base = fmt.base;
-    unsigned char d = 0;
     while(it != end)
     {    
-        d = fmt.toDigit(*it);
+        unsigned char d = fmt.toDigit(*it);
         
         if(d >= base)
             break;
@@ -982,6 +996,7 @@ InIterT getFloat(InIterT it, InIterT end, bool& ok, T& n, const FormatT& fmt)
         if(digit >= fmt.base)
             return it;
         
+        ok = true;
         n *= 10;
         n += digit; 
     }

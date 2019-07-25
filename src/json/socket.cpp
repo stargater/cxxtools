@@ -37,39 +37,73 @@ namespace cxxtools
 namespace json
 {
 
-Socket::Socket(RpcServerImpl& server, ServiceRegistry& serviceRegistry, net::TcpServer& tcpServer)
+Socket::Socket(RpcServerImpl& rpcServerImpl, net::TcpServer& tcpServer, const std::string& certificateFile, const std::string& privateKeyFile, int sslVerifyLevel, const std::string& sslCa)
     : inputSlot(slot(*this, &Socket::onInput)),
+      _rpcServerImpl(rpcServerImpl),
       _tcpServer(tcpServer),
-      _server(server),
-      _responder(serviceRegistry),
+      _certificateFile(certificateFile),
+      _privateKeyFile(privateKeyFile),
+      _responder(rpcServerImpl._serviceRegistry),
+      _sslVerifyLevel(sslVerifyLevel),
+      _sslCa(sslCa),
       _accepted(false)
 {
     _stream.attachDevice(*this);
     cxxtools::connect(IODevice::inputReady, *this, &Socket::onIODeviceInput);
     cxxtools::connect(_stream.buffer().outputReady, *this, &Socket::onOutput);
+    cxxtools::connect(acceptSslCertificate, *this, &Socket::onAcceptSslCertificate);
     _responder.begin();
 }
 
 Socket::Socket(Socket& socket)
-    : inputSlot(slot(*this, &Socket::onInput)),
+    : net::TcpSocket(),
+      Connectable(*this),
+      inputSlot(slot(*this, &Socket::onInput)),
+      _rpcServerImpl(socket._rpcServerImpl),
       _tcpServer(socket._tcpServer),
-      _server(socket._server),
-      _responder(socket._responder._serviceRegistry),
+      _certificateFile(socket._certificateFile),
+      _privateKeyFile(socket._privateKeyFile),
+      _responder(_rpcServerImpl._serviceRegistry),
+      _sslVerifyLevel(socket._sslVerifyLevel),
+      _sslCa(socket._sslCa),
       _accepted(false)
 {
     _stream.attachDevice(*this);
     cxxtools::connect(IODevice::inputReady, *this, &Socket::onIODeviceInput);
     cxxtools::connect(_stream.buffer().outputReady, *this, &Socket::onOutput);
+    cxxtools::connect(acceptSslCertificate, *this, &Socket::onAcceptSslCertificate);
     _responder.begin();
 }
 
 void Socket::accept()
 {
-    net::TcpSocket::accept(_tcpServer, net::TcpSocket::DEFER_ACCEPT);
+    log_debug("accept");
+    net::TcpSocket::accept(_tcpServer);
+
+    if (!_certificateFile.empty())
+    {
+        loadSslCertificateFile(_certificateFile, _privateKeyFile);
+        setSslVerify(_sslVerifyLevel, _sslCa);
+        beginSslAccept();
+    }
+}
+
+void Socket::postAccept()
+{
+    log_trace("post accept");
+    if (!_certificateFile.empty())
+    {
+        cxxtools::Timespan t = getTimeout();
+        setTimeout(cxxtools::Seconds(10));
+        endSslAccept();
+        setTimeout(t);
+    }
 
     _accepted = true;
 
-    buffer().beginRead();
+    _stream.buffer().beginRead();
+
+    log_debug("accepted");
 }
 
 void Socket::setSelector(SelectorBase* s)
@@ -82,7 +116,7 @@ void Socket::removeSelector()
     TcpSocket::setSelector(0);
 }
 
-void Socket::onIODeviceInput(IODevice& iodevice)
+void Socket::onIODeviceInput(IODevice& /*iodevice*/)
 {
     log_debug("onIODeviceInput");
     inputReady(*this);
@@ -151,6 +185,11 @@ bool Socket::onOutput(StreamBuffer& sb)
     }
 
     return true;
+}
+
+bool Socket::onAcceptSslCertificate(const SslCertificate& cert)
+{
+    return !_rpcServerImpl.acceptSslCertificate.isConnected() || _rpcServerImpl.acceptSslCertificate(cert);
 }
 
 }

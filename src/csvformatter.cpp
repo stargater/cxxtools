@@ -37,7 +37,7 @@ namespace cxxtools
         : _firstline(true),
           _collectTitles(true),
           _level(0),
-          _delimiter(','),
+          _delimiter(L","),
           _quote('"'),
           _lineEnding(L"\n"),
           _ts(new TextOStream(os, codec)),
@@ -48,7 +48,7 @@ namespace cxxtools
         : _firstline(true),
           _collectTitles(true),
           _level(0),
-          _delimiter(','),
+          _delimiter(L","),
           _quote('"'),
           _lineEnding(L"\n"),
           _ts(0),
@@ -76,10 +76,10 @@ namespace cxxtools
         _collectTitles = false;
     }
 
-    void CsvFormatter::toCsvData(String& ret, const std::string& type, const String& value)
+    void CsvFormatter::toCsvData(String& ret, const std::string& /*type*/, const String& value)
     {
         if (value.find(Char(_quote)) == String::npos
-                && value.find(Char(_delimiter)) == String::npos
+                && value.find(_delimiter) == String::npos
                 && value.find(_lineEnding) == String::npos)
         {
             ret = value;
@@ -135,7 +135,7 @@ namespace cxxtools
         _data.clear();
     }
 
-    void CsvFormatter::addValueString(const std::string& name, const std::string& type,
+    void CsvFormatter::addValueString(const std::string& /*name*/, const std::string& type,
                           const String& value)
     {
         if (_memberName.empty())
@@ -162,7 +162,7 @@ namespace cxxtools
         }
     }
 
-    void CsvFormatter::beginArray(const std::string& name, const std::string& type)
+    void CsvFormatter::beginArray(const std::string& /*name*/, const std::string& /*type*/)
     {
         ++_level;
         log_debug("beginArray, level=" << _level);
@@ -178,7 +178,7 @@ namespace cxxtools
             dataOut();
     }
 
-    void CsvFormatter::beginObject(const std::string& name, const std::string& type)
+    void CsvFormatter::beginObject(const std::string& /*name*/, const std::string& /*type*/)
     {
         ++_level;
         log_debug("beginObject, level=" << _level);

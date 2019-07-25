@@ -26,9 +26,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-#include <cxxtools/noncopyable.h>
+#ifndef CXXTOOLS_POSIX_EXEC_H
+#define CXXTOOLS_POSIX_EXEC_H
+
 #include <cxxtools/systemerror.h>
-#include <stdexcept>
+#include <vector>
 #include <string>
 #include <unistd.h>
 
@@ -38,65 +40,59 @@ namespace cxxtools
   {
     /** cxxtools::posix::Exec is a wrapper around the exec?? functions of posix.
 
+        Note that after an fork, memory allocations are not allowed in a
+        multithreaded application. So arguments must be set befor a possible
+        call to fork.
+
         Usage is like this:
         \code
           cxxtools::posix::Exec e("ls");
           e.push_back("-l");
+          // possibly fork here
           e.exec();
         \endcode
 
         This replaces the current process with the unix command "ls -l".
      */
-    template <unsigned dataSize, unsigned maxArgs>
-    class BasicExec : private cxxtools::NonCopyable
+    class Exec
     {
-        char data[dataSize];
-        char* args[maxArgs + 2];
-        unsigned argc;
+        std::vector<std::string> _args;
+        std::vector<const char*> _argv;
 
       public:
-        typedef const std::string& const_reference;
-        typedef std::string& reference;
-
-        explicit BasicExec(const std::string& cmd)
-          : argc(0)
+        explicit Exec(const std::string& cmd)
         {
-          if (cmd.size() >= dataSize - 1)
-            throw std::out_of_range("command <" + cmd + "> too large");
-          args[0] = &data[0];
-          cmd.copy(args[0], cmd.size());
-          args[0][cmd.size()] = '\0';
-          args[1] = args[0] + cmd.size() + 1;
+          _args.push_back(cmd);
+          _argv.reserve(1);
         }
 
-        BasicExec& push_back(const std::string& arg)
+        /// Adds a parameter to the process.
+        Exec& push_back(const std::string& arg)
         {
-          if (static_cast<unsigned>(args[argc + 1] + arg.size() - data) >= dataSize)
-            throw std::out_of_range("argument list too long");
-          if (argc >= maxArgs)
-            throw std::out_of_range("too many arguments");
-
-          ++argc;
-          arg.copy(args[argc], arg.size());
-          args[argc][arg.size()] = '\0';
-          args[argc + 1] = args[argc] + arg.size() + 1;
-
+          _args.push_back(arg);
+          _argv.reserve(_args.size());
           return *this;
         }
 
-        // nice alias of push_back
-        BasicExec& arg(const std::string& arg)
+        /// Alias for push_back if you prefer that name.
+        Exec& arg(const std::string& arg)
         { return push_back(arg); }
 
+        /// Call `execvp` to replace the current process.
         void exec()
         {
-          args[argc + 1] = 0;
-          ::execvp(args[0], args);
+          for (unsigned n = 0; n < _args.size(); ++n)
+              _argv.push_back(_args[n].c_str());
+          _argv.push_back(0);
+          ::execvp(_argv[0], (char**)&_argv[0]);
+
+          // `execvp` do not return and hence this won't never be executed.
+          // Just in case:
           throw SystemError("execvp");
         }
 
     };
-
-    typedef BasicExec<0x8000, 256> Exec;
   }
 }
+
+#endif

@@ -36,7 +36,7 @@
 #include <fcntl.h>
 #include <sys/poll.h>
 #include <cxxtools/log.h>
-#include <cxxtools/hdstream.h>
+#include <cxxtools/hexdump.h>
 
 log_define("cxxtools.iodevice.impl")
 
@@ -93,7 +93,7 @@ void IODeviceImpl::open(const std::string& path, IODevice::OpenMode mode, bool i
 
     _fd = ::open( path.c_str(), flags );
     if(_fd == -1)
-        throw AccessFailed(getErrnoString("open failed"));
+        throw AccessFailed(getErrnoString("open"));
 
     if (!inherit)
     {
@@ -101,7 +101,7 @@ void IODeviceImpl::open(const std::string& path, IODevice::OpenMode mode, bool i
         flags |= FD_CLOEXEC ;
         int ret = fcntl(_fd, F_SETFD, flags);
         if(-1 == ret)
-            throw IOError(getErrnoString("Could not set FD_CLOEXEC"));
+            throw IOError(getErrnoString("fcntl(FD_CLOEXEC)"));
     }
 
 }
@@ -114,10 +114,13 @@ void IODeviceImpl::open(int fd, bool isAsync, bool inherit)
     if (isAsync)
     {
         int flags = fcntl(_fd, F_GETFL);
-        flags |= O_NONBLOCK ;
-        int ret = fcntl(_fd, F_SETFL, flags);
-        if(-1 == ret)
-            throw IOError(getErrnoString("Could not set fd to non-blocking"));
+        if ((flags & O_NONBLOCK) == 0)
+        {
+            flags |= O_NONBLOCK ;
+            int ret = fcntl(_fd, F_SETFL, flags);
+            if(-1 == ret)
+                throw IOError(getErrnoString("fcntl(O_NONBLOCK)"));
+        }
     }
 
     if (!inherit)
@@ -126,7 +129,7 @@ void IODeviceImpl::open(int fd, bool isAsync, bool inherit)
         flags |= FD_CLOEXEC ;
         int ret = fcntl(_fd, F_SETFD, flags);
         if(-1 == ret)
-            throw IOError(getErrnoString("Could not set FD_CLOEXEC"));
+            throw IOError(getErrnoString("fcntl(FD_CLOEXEC)"));
     }
 
 }
@@ -135,6 +138,9 @@ void IODeviceImpl::open(int fd, bool isAsync, bool inherit)
 void IODeviceImpl::close()
 {
     log_debug("close device; fd=" << _fd << " pfd=" << _pfd);
+
+    if (_pfd)
+        _pfd->revents = 0;
 
     if(_fd != -1)
     {
@@ -147,14 +153,14 @@ void IODeviceImpl::close()
             if( errno != EINTR )
             {
                 log_error("close of iodevice failed; errno=" << errno);
-                throw IOError(getErrnoString("Could not close file handle"));
+                throw IOError(getErrnoString("close"));
             }
         }
     }
 }
 
 
-size_t IODeviceImpl::beginRead(char* buffer, size_t n, bool& eof)
+size_t IODeviceImpl::beginRead(char* /*buffer*/, size_t /*n*/, bool& /*eof*/)
 {
     if(_pfd)
     {
@@ -189,26 +195,28 @@ size_t IODeviceImpl::read( char* buffer, size_t count, bool& eof )
     while(true)
     {
         ret = ::read( _fd, (void*)buffer, count);
+        int e = errno;
 
         if(ret > 0)
         {
-            log_debug("::read(" << _fd << ", " << count << ") returned " << ret << " => \"" << hexDump(buffer, ret) << '"');
+            log_debug("::read(" << _fd << ", " << count << ") returned " << ret);
+            log_finer(hexDump(buffer, ret));
             break;
         }
 
-        log_debug("::read(" << _fd << ", " << count << ") returned " << ret << " errno=" << errno);
+        log_debug("::read(" << _fd << ", " << count << ") returned " << ret << " errno=" << e);
 
-        if(ret == 0 || errno == ECONNRESET)
+        if(ret == 0 || e == ECONNRESET)
         {
             eof = true;
             return 0;
         }
 
-        if(errno == EINTR)
+        if(e == EINTR)
             continue;
 
-        if(errno != EAGAIN)
-            throw IOError(getErrnoString("read failed"));
+        if(e != EAGAIN)
+            throw IOError(getErrnoString("read"));
 
         pollfd pfd;
         pfd.fd = this->fd();
@@ -230,19 +238,20 @@ size_t IODeviceImpl::read( char* buffer, size_t count, bool& eof )
 size_t IODeviceImpl::beginWrite(const char* buffer, size_t n)
 {
     log_debug("::write(" << _fd << ", buffer, " << n << ')');
+    log_finer(hexDump(buffer, n));
+
     ssize_t ret = ::write(_fd, (const void*)buffer, n);
+    int e = errno;
 
     log_debug("write returned " << ret);
     if (ret > 0)
         return static_cast<size_t>(ret);
 
-    if (ret == 0 || errno == ECONNRESET || errno == EPIPE)
+    if (ret == 0 || e == ECONNRESET || e == EPIPE)
         throw IOError("lost connection to peer");
 
-    if(_pfd)
-    {
+    if (_pfd)
         _pfd->events |= POLLOUT;
-    }
 
     return 0;
 }
@@ -279,20 +288,22 @@ size_t IODeviceImpl::write( const char* buffer, size_t count )
     while(true)
     {
         log_debug("::write(" << _fd << ", buffer, " << count << ')');
+        log_finer(hexDump(buffer, count));
 
         ret = ::write(_fd, (const void*)buffer, count);
+        int e = errno;
         log_debug("write returned " << ret);
         if(ret > 0)
             break;
 
-        if(ret == 0 || errno == ECONNRESET || errno == EPIPE)
+        if (ret == 0 || e == ECONNRESET || e == EPIPE)
             throw IOError("lost connection to peer");
 
-        if(errno == EINTR)
+        if (e == EINTR)
             continue;
 
-        if(errno != EAGAIN)
-            throw IOError(getErrnoString("Could not write to file handle"));
+        if (e != EAGAIN)
+            throw IOError(getErrnoString("write"));
 
         pollfd pfd;
         pfd.fd = this->fd();
@@ -326,19 +337,16 @@ void IODeviceImpl::cancel()
 
 void IODeviceImpl::sync() const
 {
-    int ret = fsync(_fd);
-    if(ret != 0)
-        throw IOError(getErrnoString("Could not sync handle"));
 }
 
 
-void IODeviceImpl::attach(SelectorBase& s)
+void IODeviceImpl::attach(SelectorBase& /*s*/)
 {
 
 }
 
 
-void IODeviceImpl::detach(SelectorBase& s)
+void IODeviceImpl::detach(SelectorBase& /*s*/)
 {
     _pfd = 0;
 }
@@ -374,7 +382,7 @@ bool IODeviceImpl::wait(Timespan timeout, pollfd& pfd)
     } while (ret == -1 && errno == EINTR);
 
     if (ret == -1)
-        throw IOError(getErrnoString("poll failed"));
+        throw IOError(getErrnoString("poll"));
 
     return ret > 0;
 }
@@ -417,11 +425,29 @@ bool IODeviceImpl::checkPollEvent()
 
 bool IODeviceImpl::checkPollEvent(pollfd& pfd)
 {
-    log_trace("checkPollEvent");
+    log_trace("checkPollEvent " << pfd.revents);
 
     bool avail = false;
 
     DestructionSentry sentry(_sentry);
+
+    if( _device.wavail() > 0 || (pfd.revents & POLLOUT_MASK) )
+    {
+        outputReady();
+        avail = true;
+    }
+
+    if( ! _sentry )
+        return avail;
+
+    if( pfd.revents & POLLIN_MASK )
+    {
+        inputReady();
+        avail = true;
+    }
+
+    if( ! _sentry )
+        return avail;
 
     if (pfd.revents & POLLERR_MASK)
     {
@@ -466,24 +492,20 @@ bool IODeviceImpl::checkPollEvent(pollfd& pfd)
         return avail;
     }
 
-    if( _device.wavail() > 0 || (pfd.revents & POLLOUT_MASK) )
-    {
-        log_debug("send signal outputReady");
-        _device.outputReady(_device);
-        avail = true;
-    }
-
-    if( ! _sentry )
-        return avail;
-
-    if( pfd.revents & POLLIN_MASK )
-    {
-        log_debug("send signal inputReady");
-        _device.inputReady(_device);
-        avail = true;
-    }
-
     return avail;
 }
+
+void IODeviceImpl::inputReady()
+{
+    log_debug("send signal inputReady");
+    _device.inputReady(_device);
+}
+
+void IODeviceImpl::outputReady()
+{
+    log_debug("send signal outputReady");
+    _device.outputReady(_device);
+}
+
 
 }

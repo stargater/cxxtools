@@ -37,6 +37,12 @@ void Formatter::addValueStdString(const std::string& name, const std::string& ty
     addValueString(name, type, String::widen(value));
 }
 
+void Formatter::addValueChar(const std::string& name, const std::string& type,
+                         char value)
+{
+    addValueString(name, type, String(1, Char(value)));
+}
+
 void Formatter::addValueBool(const std::string& name, const std::string& type,
                          bool value)
 {
@@ -56,6 +62,18 @@ void Formatter::addValueUnsigned(const std::string& name, const std::string& typ
 }
 
 void Formatter::addValueFloat(const std::string& name, const std::string& type,
+                         float value)
+{
+    addValueString(name, type, convert<String>(value));
+}
+
+void Formatter::addValueDouble(const std::string& name, const std::string& type,
+                         double value)
+{
+    addValueString(name, type, convert<String>(value));
+}
+
+void Formatter::addValueLongDouble(const std::string& name, const std::string& type,
                          long double value)
 {
     addValueString(name, type, convert<String>(value));

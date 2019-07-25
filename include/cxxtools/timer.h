@@ -28,12 +28,11 @@
 
 #include <cxxtools/signal.h>
 #include <cxxtools/timespan.h>
-#include <vector>
-#include <cstddef>
 
 namespace cxxtools {
 
     class DateTime;
+    class UtcDateTime;
     class SelectorBase;
 
     /** @brief Notifies clients in constant intervals
@@ -91,6 +90,9 @@ namespace cxxtools {
 
             void setSelector(SelectorBase* s);
 
+            void setSelector(SelectorBase& s)
+            { setSelector(&s); }
+
             /** @brief Returs true if timer is active
             */
             bool active() const;
@@ -122,7 +124,7 @@ namespace cxxtools {
 
                 @param interval Timeout interval as a cxxtools::Timespan
             */
-            void start(const DateTime& startTime, const Milliseconds& interval);
+            void start(const DateTime& startTime, const Milliseconds& interval, bool localtime = true);
 
             /** @brief Starts the timer
 
@@ -143,7 +145,8 @@ namespace cxxtools {
 
                 @param tickTime The time, when the timer should tick.
             */
-            void at(const DateTime& tickTime);
+            void at(const DateTime& tickTime, bool localtime = true);
+            void at(const UtcDateTime& tickTime);
 
             /** @brief Stops the timer
 
@@ -169,7 +172,23 @@ namespace cxxtools {
             */
             Signal<> timeout;
 
-            Milliseconds finished() const
+            /** @brief Notifies about interval timeouts
+
+                This signal is sent if the interval time has expired.
+                As a parameter the due time is passed as local time.
+            */
+            Signal<DateTime> timeoutts;
+
+            /** @brief Notifies about interval timeouts
+
+                This signal is sent if the interval time has expired.
+                As a parameter the due time is passed in utc.
+            */
+            Signal<DateTime> timeoutUtc;
+
+            /** @brief Returns the timespan since epoch when the timer expires
+             */
+            Timespan finished() const
             { return _finished; }
 
         private:

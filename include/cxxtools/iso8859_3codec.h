@@ -1,11 +1,11 @@
 /*
- * Copyright (C) 2011 Tommi Maekitalo
- * 
+ * Copyright (C) 2015 by Tommi Maekitalo
+ *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
  * version 2.1 of the License, or (at your option) any later version.
- * 
+ *
  * As a special exception, you may use this file as part of a free
  * software library without restriction. Specifically, if other files
  * instantiate templates or use macros or inline functions from this
@@ -15,40 +15,40 @@
  * License. This exception does not however invalidate any other
  * reasons why the executable file might be covered by the GNU Library
  * General Public License.
- * 
+ *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
+#ifndef CXXTOOLS_ISO8859_3CODEC_H
+#define CXXTOOLS_ISO8859_3CODEC_H
 
-
-#include <cxxtools/jsonserializer.h>
-#include <cxxtools/utf8codec.h>
+#include <cxxtools/charmapcodec.h>
 
 namespace cxxtools
 {
 
-JsonSerializer::JsonSerializer(std::ostream& os,
-    TextCodec<Char, char>* codec)
-    : _ts(new TextOStream(os, codec ? codec : new Utf8Codec())),
-      _inObject(false)
+class Iso8859_3Codec : public CharMapCodec
 {
-    _formatter.begin(*_ts);
-}
+    public:
+        explicit Iso8859_3Codec(size_t ref = 0);
 
-JsonSerializer& JsonSerializer::begin(std::ostream& os,
-    TextCodec<Char, char>* codec)
-{
-    delete _ts;
-    _ts = new TextOStream(os, codec ? codec : new Utf8Codec());
-    _formatter.begin(*_ts);
-    return *this;
-}
+        static String decode(const char* data, unsigned size)
+            { return cxxtools::decode<Iso8859_3Codec>(data, size); }
+        static String decode(const std::string& data)
+            { return cxxtools::decode<Iso8859_3Codec>(data); }
+        static std::string encode(const Char* data, unsigned size)
+            { return cxxtools::encode<Iso8859_3Codec>(data, size); }
+        static std::string encode(const String& data)
+            { return cxxtools::encode<Iso8859_3Codec>(data); }
+};
 
 
-}
+} //namespace cxxtools
+
+#endif

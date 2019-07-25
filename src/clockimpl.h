@@ -36,17 +36,13 @@ namespace cxxtools
 class ClockImpl : public RefCounted
 {
     public:
-        ClockImpl();
-
-        ~ClockImpl();
-
-        void start ();
+        Timespan start();
 
         Timespan stop() const;
 
-        static DateTime getSystemTime();
+        static UtcDateTime getSystemTime();
 
-        static DateTime getLocalTime();
+        static LocalDateTime getLocalTime();
 
         static Timespan getSystemTicks();
 

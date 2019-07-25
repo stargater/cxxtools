@@ -33,7 +33,7 @@ namespace cxxtools
 
 void IDecomposer::formatEach(const SerializationInfo& si, Formatter& formatter)
 {
-    if (si.category() == SerializationInfo::Void)
+    if (si.isNull())
     {
         formatter.addNull( si.name(), si.typeName() );
     }
@@ -59,15 +59,33 @@ void IDecomposer::formatEach(const SerializationInfo& si, Formatter& formatter)
         }
         else if (si.isFloat())
         {
-            long double value;
+            float value;
             si.getValue(value);
             formatter.addValueFloat( si.name(), si.typeName(), value );
+        }
+        else if (si.isDouble())
+        {
+            double value;
+            si.getValue(value);
+            formatter.addValueDouble( si.name(), si.typeName(), value );
+        }
+        else if (si.isLongDouble())
+        {
+            long double value;
+            si.getValue(value);
+            formatter.addValueLongDouble( si.name(), si.typeName(), value );
         }
         else if (si.isString8())
         {
             std::string value;
             si.getValue(value);
             formatter.addValueStdString( si.name(), si.typeName(), value );
+        }
+        else if (si.isChar())
+        {
+            char value;
+            si.getValue(value);
+            formatter.addValueChar( si.name(), si.typeName(), value );
         }
         else
         {

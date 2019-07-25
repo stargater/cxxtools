@@ -1,7 +1,7 @@
 ACLOCAL_AMFLAGS = -I m4
 
 if MAKE_DEMOS
-  DEMO_DIR = demo
+  DEMO_DIR = demo demo/async demo/ssl
 endif
 
 if MAKE_UNITTEST
@@ -15,6 +15,7 @@ SUBDIRS = src \
     src/bin \
     src/json \
     include \
+    tools \
     $(DEMO_DIR) $(UNITTEST_DIR)
 
 bin_SCRIPTS = cxxtools-config

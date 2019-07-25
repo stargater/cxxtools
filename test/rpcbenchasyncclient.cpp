@@ -197,7 +197,7 @@ class SeqExecutor : public RemoteExecutor
     void onSeqFinished(cxxtools::RemoteResult<std::vector<int> >& result)
     {
       std::vector<int> ret = result.get();
-      if (ret.size() != _endValue - _startValue + 1)
+      if (ret.size() != static_cast<std::vector<int>::size_type>(_endValue - _startValue + 1))
       {
         {
           cxxtools::MutexLock lock(mutex);
@@ -274,7 +274,7 @@ class BenchClient : public cxxtools::Connectable
       }
     }
 
-    void onFailed(RemoteExecutor* e)
+    void onFailed(RemoteExecutor* /*e*/)
     {
       cxxtools::atomicIncrement(_requestsFailed);
     }

@@ -27,9 +27,16 @@
  */
 
 #include "cxxtools/query_params.h"
+#include "cxxtools/serializationinfo.h"
+#include "cxxtools/serializationerror.h"
+#include "cxxtools/utf8codec.h"
+#include "cxxtools/log.h"
+
 #include <iterator>
 #include <iostream>
 #include <stdlib.h>
+
+log_define("cxxtools.queryparams")
 
 namespace cxxtools
 {
@@ -74,6 +81,11 @@ namespace
           ;
         else if (ch == '%')
           _state = state_keyesc;
+        else if (ch == '+')
+        {
+          _key = ' ';
+          _state = state_key;
+        }
         else
         {
           _key = ch;
@@ -92,6 +104,8 @@ namespace
         }
         else if (ch == '%')
           _state = state_keyesc;
+        else if (ch == '+')
+          _key += ' ';
         else
           _key += ch;
         break;
@@ -393,6 +407,66 @@ std::string QueryParams::getUrl() const
   }
 
   return url;
+}
+
+void operator<<= (cxxtools::SerializationInfo& si, const QueryParams& q)
+{
+    for (QueryParams::values_type::const_iterator it = q._values.begin(); it != q._values.end(); ++it)
+    {
+        enum {
+            state_0,
+            state_key,
+            state_keyend
+        } state = state_0;
+
+        std::string nodename;
+
+        cxxtools::SerializationInfo* current = &si;
+        log_debug("parse query param name <" << it->name << '>');
+
+        for (unsigned n = 0; n < it->name.size(); ++n)
+        {
+            char ch = it->name[n];
+            switch (state)
+            {
+                case state_0:
+                    if (ch == '[')
+                    {
+                        cxxtools::SerializationInfo* p = current->findMember(nodename);
+                        current = p ? p : &current->addMember(nodename);
+                        nodename.clear();
+                        state = state_key;
+                    }
+                    else
+                        nodename += ch;
+                    break;
+
+                case state_key:
+                    if (ch == ']')
+                        state = state_keyend;
+                    else
+                        nodename += ch;
+                    break;
+
+                case state_keyend:
+                    if (ch == '[')
+                    {
+                        cxxtools::SerializationInfo* p = current->findMember(nodename);
+                        current = p ? p : &current->addMember(nodename);
+                        nodename.clear();
+                        state = state_key;
+                    }
+                    else
+                    {
+                        log_warn("invalid query param name <" << it->name.substr(0, n) << " *** " << it->name.substr(n) << "> (1)");
+                        SerializationError::doThrow("'[' expected in query parameters");
+                    }
+                    break;
+            }
+        }
+
+        current->addMember(nodename) <<= Utf8Codec::decode(it->value);
+    }
 }
 
 }

@@ -29,6 +29,7 @@
 #include "cxxtools/unit/testsuite.h"
 #include "cxxtools/unit/registertest.h"
 #include "cxxtools/jsondeserializer.h"
+#include "cxxtools/json.h"
 #include "cxxtools/log.h"
 
 //log_define("cxxtools.test.jsondeserializer")
@@ -84,7 +85,7 @@ namespace
     {
     };
 
-    inline void operator>>= (const cxxtools::SerializationInfo& si, EmptyObject& obj)
+    inline void operator>>= (const cxxtools::SerializationInfo& /*si*/, EmptyObject& /*obj*/)
     {
     }
 
@@ -103,9 +104,13 @@ class JsonDeserializerTest : public cxxtools::unit::TestSuite
             registerMethod("testArray", *this, &JsonDeserializerTest::testArray);
             registerMethod("testEmptyArrays", *this, &JsonDeserializerTest::testEmptyArrays);
             registerMethod("testStrings", *this, &JsonDeserializerTest::testStrings);
+            registerMethod("testUnicodeString", *this, &JsonDeserializerTest::testUnicodeString);
             registerMethod("testComplexObject", *this, &JsonDeserializerTest::testComplexObject);
             registerMethod("testCommentLine", *this, &JsonDeserializerTest::testCommentLine);
             registerMethod("testCommentMultiline", *this, &JsonDeserializerTest::testCommentMultiline);
+            registerMethod("testMultipleObjectsT", *this, &JsonDeserializerTest::testMultipleObjectsT);
+            registerMethod("testMultipleObjectsI", *this, &JsonDeserializerTest::testMultipleObjectsI);
+            registerMethod("testTrailingComma", *this, &JsonDeserializerTest::testTrailingComma);
         }
 
         void testInt()
@@ -219,6 +224,20 @@ class JsonDeserializerTest : public cxxtools::unit::TestSuite
             CXXTOOLS_UNIT_ASSERT_EQUALS(data[3][1], '4');
         }
 
+        void testUnicodeString()
+        {
+            cxxtools::String data;
+
+            std::istringstream in("\"M\xc3\xa4kitalo\xf0\x90\xa4\x80\"");
+
+            cxxtools::JsonDeserializer deserializer(in);
+            deserializer.deserialize(data);
+
+            CXXTOOLS_UNIT_ASSERT_EQUALS(data.size(), 9);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(data[1].value(), 0xe4);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(data[8].value(), 0x10900);
+        }
+
         void testComplexObject()
         {
             TestObject2 data;
@@ -301,6 +320,64 @@ class JsonDeserializerTest : public cxxtools::unit::TestSuite
             CXXTOOLS_UNIT_ASSERT_EQUALS(data.doubleValue, 1000.0);
             CXXTOOLS_UNIT_ASSERT_EQUALS(data.boolValue, true);
             CXXTOOLS_UNIT_ASSERT_EQUALS(data.nullValue, true);
+        }
+
+        void testMultipleObjectsT()
+        {
+            std::vector<int> data;
+            std::istringstream in("[3][4] [5]");
+            cxxtools::TextIStream tin(in, new cxxtools::Utf8Codec());
+
+            tin >> cxxtools::Json(data);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(data.size(), 1);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(data[0], 3);
+
+            tin >> cxxtools::Json(data);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(data.size(), 1);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(data[0], 4);
+
+            tin >> cxxtools::Json(data);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(data.size(), 1);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(data[0], 5);
+
+        }
+
+        void testMultipleObjectsI()
+        {
+            std::vector<int> data;
+            std::istringstream in("[3][4] [5]");
+
+            in >> cxxtools::Json(data);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(data.size(), 1);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(data[0], 3);
+
+            in >> cxxtools::Json(data);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(data.size(), 1);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(data[0], 4);
+
+            in >> cxxtools::Json(data);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(data.size(), 1);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(data[0], 5);
+
+        }
+
+        void testTrailingComma()
+        {
+            std::istringstream in("{ a: 5, b: [ 2,3,], }");
+            cxxtools::JsonDeserializer deserializer(in);
+            cxxtools::SerializationInfo si;
+            CXXTOOLS_UNIT_ASSERT_NOTHROW(deserializer.deserialize(si));
+
+            int value = 0;
+            si.getMember("a") >>= value;
+
+            CXXTOOLS_UNIT_ASSERT_EQUALS(value, 5);
+
+            std::vector<int> data;
+            si.getMember("b") >>= data;
+            CXXTOOLS_UNIT_ASSERT_EQUALS(data.size(), 2);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(data[0], 2);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(data[1], 3);
         }
 };
 

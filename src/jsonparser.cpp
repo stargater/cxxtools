@@ -31,7 +31,9 @@
 #include <cxxtools/serializationerror.h>
 #include <cxxtools/utf8codec.h>
 #include <cxxtools/log.h>
+
 #include <cctype>
+#include <sstream>
 
 log_define("cxxtools.json.parser")
 
@@ -64,6 +66,7 @@ void JsonParser::doThrow(const std::string& msg)
 
 void JsonParser::throwInvalidCharacter(Char ch)
 {
+  log_debug("invalid character '" << ch << "' in state " << _state);
   doThrow((std::string("invalid character '") + ch.narrow() + '\''));
 }
 
@@ -191,7 +194,10 @@ int JsonParser::advance(Char ch)
                     _stringParser.clear();
                 }
                 else if (ch == '}')
+                {
+                    _state = state_end;
                     return 1;
+                }
                 else if (ch == '/')
                 {
                     _nextState = _state;
@@ -207,7 +213,7 @@ int JsonParser::advance(Char ch)
                 break;
 
             case state_object_plainname:
-                if (std::isalnum(ch.value()))
+                if (std::isalnum(ch.value()) || ch == 'l')
                     _token += ch;
                 else if (std::isspace(ch.value()))
                 {
@@ -262,7 +268,7 @@ int JsonParser::advance(Char ch)
 
                 if (ret != 0)
                 {
-                    log_debug("leave member");
+                    log_debug("leave object member");
                     _deserializer->leaveMember();
                     _state = state_object_e;
                 }
@@ -272,9 +278,12 @@ int JsonParser::advance(Char ch)
 
             case state_object_e:
                 if (ch == ',')
-                    _state = state_object_next_member;
+                    _state = state_object_next_member0;
                 else if (ch == '}')
+                {
+                    _state = state_end;
                     return 1;
+                }
                 else if (ch == '/')
                 {
                     _nextState = _state;
@@ -283,6 +292,21 @@ int JsonParser::advance(Char ch)
                 else if (!std::isspace(ch.value()))
                     throwInvalidCharacter(ch);
                 break;
+
+            case state_object_next_member0:
+                if (ch == '}')
+                {
+                    _state = state_end;
+                    return 1;
+                }
+                else if (std::isspace(ch.value()))
+                {
+                    return 0;
+                }
+
+                _state = state_object_next_member;
+
+                // no break
 
             case state_object_next_member:
                 if (ch == '"')
@@ -307,6 +331,7 @@ int JsonParser::advance(Char ch)
             case state_array:
                 if (ch == ']')
                 {
+                    _state = state_end;
                     return 1;
                 }
                 else if (ch == '/')
@@ -328,6 +353,25 @@ int JsonParser::advance(Char ch)
                 }
                 break;
 
+            case state_array_value0:
+                if (ch == ']')
+                {
+                    _state = state_end;
+                    return 1;
+                }
+                else if (std::isspace(ch.value()))
+                {
+                    return 0;
+                }
+
+                log_debug("begin array member");
+                _deserializer->beginMember(std::string(),
+                        std::string(), SerializationInfo::Void);
+                _next->begin(*_deserializer);
+                _state = state_array_value;
+
+                // no break
+
             case state_array_value:
                 ret = _next->advance(ch);
                 if (ret != 0)
@@ -338,20 +382,17 @@ int JsonParser::advance(Char ch)
             case state_array_e:
                 if (ch == ']')
                 {
-                    log_debug("leave member");
+                    log_debug("leave array member");
                     _deserializer->leaveMember();
+                    _state = state_end;
                     return 1;
                 }
                 else if (ch == ',')
                 {
-                    log_debug("leave member");
+                    log_debug("leave array member");
                     _deserializer->leaveMember();
 
-                    log_debug("begin array member");
-                    _deserializer->beginMember(std::string(),
-                            std::string(), SerializationInfo::Void);
-                    _next->begin(*_deserializer);
-                    _state = state_array_value;
+                    _state = state_array_value0;
                 }
                 else if (ch == '/')
                 {
@@ -482,7 +523,7 @@ int JsonParser::advance(Char ch)
                     _state = state_comment0;
                 }
                 else if (!std::isspace(ch.value()))
-                    doThrow(std::string("unexpected character '") + ch.narrow() + "\' after end");
+                    doThrow(std::string("unexpected character '") + ch.narrow() + "\' after end in json parser");
                 break;
         }
     }
@@ -509,8 +550,10 @@ void JsonParser::finish()
         case state_object_after_name:
         case state_object_value:
         case state_object_e:
+        case state_object_next_member0:
         case state_object_next_member:
         case state_array:
+        case state_array_value0:
         case state_array_value:
         case state_array_e:
         case state_string:
@@ -518,7 +561,8 @@ void JsonParser::finish()
         case state_commentline:
         case state_comment:
         case state_comment_e:
-            SerializationError::doThrow("unexpected end");
+            log_warn("unexpected end of json; state=" << _state);
+            doThrow("unexpected end of json");
 
         case state_number:
             _deserializer->setValue(_token);

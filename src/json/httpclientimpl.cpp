@@ -28,11 +28,9 @@
 
 #include "httpclientimpl.h"
 #include "cxxtools/remoteprocedure.h"
-#include "cxxtools/textstream.h"
 #include "cxxtools/jsonformatter.h"
 #include "cxxtools/http/replyheader.h"
 #include "cxxtools/selectable.h"
-#include "cxxtools/utf8codec.h"
 #include "cxxtools/ioerror.h"
 #include "cxxtools/clock.h"
 #include "cxxtools/log.h"
@@ -74,7 +72,21 @@ void HttpClientImpl::beginCall(IComposer& r, IRemoteProcedure& method, IDecompos
 
     prepareRequest(method.name(), argv, argc);
 
-    _client.beginExecute(_request);
+    try
+    {
+        _client.beginExecute(_request);
+    }
+    catch (const std::exception& )
+    {
+        IRemoteProcedure* proc = _proc;
+        cancel();
+
+        _exceptionPending = true;
+        proc->onFinished();
+
+        if (_exceptionPending)
+            throw;
+    }
 
     _scanner.begin(_deserializer, r);
 }
@@ -139,10 +151,9 @@ void HttpClientImpl::prepareRequest(const String& name, IDecomposer** argv, unsi
     _request.setHeader("Content-Type", "application/json");
     _request.method("POST");
 
-    TextOStream ts(_request.body(), new Utf8Codec());
     JsonFormatter formatter;
 
-    formatter.begin(ts);
+    formatter.begin(_request.body());
 
     formatter.beginObject(std::string(), std::string());
 
@@ -162,8 +173,6 @@ void HttpClientImpl::prepareRequest(const String& name, IDecomposer** argv, unsi
     formatter.finishObject();
 
     formatter.finish();
-
-    ts.flush();
 }
 
 void HttpClientImpl::onReplyHeader(http::Client& client)
@@ -206,7 +215,7 @@ std::size_t HttpClientImpl::onReplyBody(http::Client& client)
     return count;
 }
 
-void HttpClientImpl::onReplyFinished(http::Client& client)
+void HttpClientImpl::onReplyFinished(http::Client& /*client*/)
 {
     log_debug("onReplyFinished; method=" << static_cast<void*>(_proc));
 

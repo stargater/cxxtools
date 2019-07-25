@@ -1,11 +1,11 @@
 /*
- * Copyright (C) 2007 Tommi Maekitalo
- * 
+ * Copyright (C) 2018 Tommi Maekitalo
+ *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License as published by the Free Software Foundation; either
  * version 2.1 of the License, or (at your option) any later version.
- * 
+ *
  * As a special exception, you may use this file as part of a free
  * software library without restriction. Specifically, if other files
  * instantiate templates or use macros or inline functions from this
@@ -15,68 +15,55 @@
  * License. This exception does not however invalidate any other
  * reasons why the executable file might be covered by the GNU Library
  * General Public License.
- * 
+ *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * Lesser General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-#include "cxxtools/quotedprintablestream.h"
+#ifndef CXXTOOLS_PTRSTREAM_H
+#define CXXTOOLS_PTRSTREAM_H
+
+#include <cxxtools/ptrstreambuf.h>
+#include <iostream>
 
 namespace cxxtools
 {
 
-std::streambuf::int_type QuotedPrintable_streambuf::overflow(std::streambuf::int_type ch)
+/** The class implements a iostream interface to a char buffer.
+ *
+ *  The user is responsible to provide a buffer, which can be read and written to.
+ *  The buffer must be valid as long as the class reads from or writes to it.
+ */
+template <typename CharT>
+class BasicPtrStream : public std::basic_iostream<CharT>
 {
-  if (ch >= 32 && ch < 128 && ch != '=')
-  {
-    if (++col > 75)
+    BasicPtrStreamBuf<CharT> _streambuf;
+
+public:
+    BasicPtrStream(CharT* begin, CharT* end)
+        : _streambuf(begin, end)
     {
-      sinksource->sputc('=');
-      sinksource->sputc('\n');
-      col = 0;
+        std::basic_iostream<CharT>::init(&_streambuf);
     }
 
-    sinksource->sputc(ch);
-  }
-  else if (ch == '\n')
-  {
-    sinksource->sputc('\n');
-    col = 0;
-  }
-  else
-  {
-    if (col > 73)
+    BasicPtrStream(CharT* begin, size_t size)
+        : _streambuf(begin, size)
     {
-      sinksource->sputc('=');
-      sinksource->sputc('\n');
-      col = 3;
+        std::basic_iostream<CharT>::init(&_streambuf);
     }
-    else
-      col += 3;
 
-    static const char hex[] = "0123456789ABCDEF";
-    sinksource->sputc('=');
-    sinksource->sputc(hex[(ch >> 4) & 0xf]);
-    sinksource->sputc(hex[ch & 0xf]);
-  }
+    CharT* begin() const  { return _streambuf.begin(); }
+    CharT* end() const    { return _streambuf.end(); }
+};
 
-  return 0;
-}
-
-std::streambuf::int_type QuotedPrintable_streambuf::underflow()
-{
-  return traits_type::eof();
-}
-
-int QuotedPrintable_streambuf::sync()
-{
-  return sinksource->pubsync();
-}
+typedef BasicPtrStream<char> PtrStream;
 
 }
+
+#endif

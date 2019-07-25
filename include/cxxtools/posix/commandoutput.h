@@ -63,9 +63,6 @@ namespace cxxtools
         Pipestreambuf streambuf;
 
       public:
-        typedef Exec::const_reference const_reference;
-        typedef Exec::reference reference;
-
         explicit CommandOutput(const std::string& cmd, unsigned bufsize = 8192)
           : std::istream(&streambuf),
             _fork(false),
@@ -80,7 +77,7 @@ namespace cxxtools
         void run(bool combineStderr = false);
 
         int wait(int options = 0)
-        { return _fork.wait(); }
+        { return _fork.wait(options); }
 
         IODevice& in()
         { return streambuf.in(); }

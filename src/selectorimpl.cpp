@@ -35,7 +35,6 @@
 #include <cerrno>
 #include <unistd.h>
 #include <fcntl.h>
-#include <signal.h>
 #include <cassert>
 #include <iostream>
 #include <limits>
@@ -139,14 +138,14 @@ void SelectorImpl::changed( Selectable& s )
 
 bool SelectorImpl::waitUntil(Timespan until)
 {
-    if (_avail.size() > 0)
+    if (!_avail.empty())
         until = Timespan(0);
 
     if (_isDirty)
     {
         _pollfds.clear();
 
-        // Groesse neu berechnen
+        // recalculate size
         size_t pollSize= 1;
 
         std::set<Selectable*>::iterator iter;
@@ -163,10 +162,10 @@ bool SelectorImpl::waitUntil(Timespan until)
 
         _pollfds.assign(pollSize, pfd);
 
-        // Eintraege einfuegen
+        // add entries
         pollfd* pCurr= &_pollfds[0];
 
-        // Event Pipe einfuegen
+        // insert event pipe
         pCurr->fd = _wakePipe[0];
         pCurr->events = POLLIN;
 
@@ -293,7 +292,7 @@ bool SelectorImpl::waitUntil(Timespan until)
     }
     catch (...)
     {
-        _current= _devices.end();
+        _current = _devices.end();
         throw;
     }
 
@@ -304,7 +303,6 @@ bool SelectorImpl::waitUntil(Timespan until)
 void SelectorImpl::wake()
 {
     ::write( _wakePipe[1], "W", 1);
-    ::fsync( _wakePipe[1] );
 }
 
 } //namespace cxxtools

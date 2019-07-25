@@ -31,11 +31,13 @@
 
 #include <string>
 #include <cxxtools/signal.h>
+#include <cxxtools/delegate.h>
 #include <cxxtools/serviceregistry.h>
 
 namespace cxxtools
 {
     class EventLoopBase;
+    class SslCertificate;
 
     namespace json
     {
@@ -45,15 +47,50 @@ namespace cxxtools
         class RpcServer : public ServiceRegistry
         {
                 friend class Responder;
+                RpcServerImpl* newImpl(EventLoopBase& eventLoop);
 
             public:
-                RpcServer(EventLoopBase& eventLoop);
-                RpcServer(EventLoopBase& eventLoop, const std::string& ip, unsigned short int port, int backlog = 64);
-                RpcServer(EventLoopBase& eventLoop, unsigned short int port, int backlog = 64);
+                explicit RpcServer(EventLoopBase& eventLoop)
+                    : _impl(newImpl(eventLoop))
+                    { }
+
+                RpcServer(EventLoopBase& eventLoop, const std::string& ip, unsigned short int port, const std::string& certificateFile = std::string(), const std::string& privateKeyFile = std::string(), int sslVerifyLevel = 0, const std::string& sslCa = std::string())
+                    : _impl(newImpl(eventLoop))
+                    { listen(ip, port, certificateFile, privateKeyFile, sslVerifyLevel, sslCa); }
+
+                RpcServer(EventLoopBase& eventLoop, unsigned short int port, const std::string& certificateFile = std::string(), const std::string& privateKeyFile = std::string(), int sslVerifyLevel = 0, const std::string& sslCa = std::string())
+                    : _impl(newImpl(eventLoop))
+                    { listen(std::string(), port, certificateFile, privateKeyFile, sslVerifyLevel, sslCa); }
+
+                RpcServer(EventLoopBase& eventLoop, const std::string& ip, unsigned short int port, const std::string& certificateFile, int sslVerifyLevel, const std::string& sslCa = std::string())
+                    : _impl(newImpl(eventLoop))
+                    { listen(ip, port, certificateFile, std::string(), sslVerifyLevel, sslCa); }
+
+                RpcServer(EventLoopBase& eventLoop, unsigned short int port, const std::string& certificateFile, int sslVerifyLevel, const std::string& sslCa = std::string())
+                    : _impl(newImpl(eventLoop))
+                    { listen(std::string(), port, certificateFile, std::string(), sslVerifyLevel, sslCa); }
+
                 ~RpcServer();
 
-                void listen(const std::string& ip, unsigned short int port, int backlog = 64);
-                void listen(unsigned short int port, int backlog = 64);
+                /** Listen to the specified ip and port.
+                 *
+                 *  When a certificate file is given, ssl is enabled. If no private key file is given, the private key
+                 *  is expected to be in the certificate file.
+                 *
+                 *  Multiple listen calls can be made to listen on multiple interfaces or different settings.
+                 *
+                 *  \see cxxtools::net::TcpSocket::setSslVerify for settings of `sslVerifyLevel` and `sslCa`
+                 */
+                void listen(const std::string& ip, unsigned short int port, const std::string& certificateFile = std::string(), const std::string& privateKeyFile = std::string(), int sslVerifyLevel = 0, const std::string& sslCa = std::string());
+
+                void listen(unsigned short int port, const std::string& certificateFile = std::string(), const std::string& privateKeyFile = std::string(), int sslVerifyLevel = 0, const std::string& sslCa = std::string())
+                { listen(std::string(), port, certificateFile, privateKeyFile, sslVerifyLevel, sslCa); }
+
+                void listen(const std::string& ip, unsigned short int port, const std::string& certificateFile, int sslVerifyLevel, const std::string& sslCa = std::string())
+                { listen(ip, port, certificateFile, std::string(), sslVerifyLevel, sslCa); }
+
+                void listen(unsigned short int port, const std::string& certificateFile, int sslVerifyLevel, const std::string& sslCa = std::string())
+                { listen(std::string(), port, certificateFile, std::string(), sslVerifyLevel, sslCa); }
 
                 void addService(const std::string& praefix, const ServiceRegistry& service);
 
@@ -72,6 +109,8 @@ namespace cxxtools
                 };
 
                 Signal<Runmode> runmodeChanged;
+
+                Delegate<bool, const SslCertificate&>& acceptSslCertificate();
 
             private:
                 RpcServerImpl* _impl;

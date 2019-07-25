@@ -26,16 +26,17 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
-#if !defined(CXXTOOLS_SYSTEM_THREAD_H)
-#define CXXTOOLS_SYSTEM_THREAD_H
 
-#include <cxxtools/noncopyable.h>
+#ifndef CXXTOOLS_THREAD_H
+#define CXXTOOLS_THREAD_H
+
 #include <cxxtools/callable.h>
 #include <cxxtools/function.h>
 #include <cxxtools/method.h>
 #include <cxxtools/timespan.h>
 
-namespace cxxtools {
+namespace cxxtools
+{
 
     /** @brief Platform independent threads
 
@@ -58,8 +59,15 @@ namespace cxxtools {
         can give up CPU time either by calling Thread::yield() or sleep() to
         stop for a specified periode of time.
     */
-    class Thread : protected NonCopyable
+    class Thread
     {
+#if __cplusplus >= 201103L
+            Thread(const Thread&) = delete;
+            Thread& operator=(const Thread&) = delete;
+#else
+            Thread(const Thread&) { }
+            Thread& operator=(const Thread&) { return *this; }
+#endif
         public:
             //! @brief Status of a thread
             enum State

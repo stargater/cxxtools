@@ -53,6 +53,7 @@ class ArgTest : public cxxtools::unit::TestSuite
             registerMethod("testArgpInt", *this, &ArgTest::testArgpInt);
             registerMethod("testArgpCharp", *this, &ArgTest::testArgpCharp);
             registerMethod("testArgpStdString", *this, &ArgTest::testArgpStdString);
+            registerMethod("testArgChar", *this, &ArgTest::testArgChar);
         }
 
         void setUp()
@@ -89,7 +90,7 @@ class ArgTest : public cxxtools::unit::TestSuite
             CXXTOOLS_UNIT_ASSERT_EQUALS(strcmp(argv[2], "-k"), 0);
             CXXTOOLS_UNIT_ASSERT_EQUALS(strcmp(argv[3], "-f"), 0);
             CXXTOOLS_UNIT_ASSERT_EQUALS(strcmp(argv[4], "foo"), 0);
-            CXXTOOLS_UNIT_ASSERT_EQUALS(argv[5], 0);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(argv[5], static_cast<const char*>(0));
         }
 
         void testArgCharP()
@@ -110,12 +111,12 @@ class ArgTest : public cxxtools::unit::TestSuite
             CXXTOOLS_UNIT_ASSERT_EQUALS(strcmp(optionI.getValue(), "foo"), 0);
             CXXTOOLS_UNIT_ASSERT_EQUALS(strcmp(optionL.getValue(), "blah"), 0);
             CXXTOOLS_UNIT_ASSERT_EQUALS(strcmp(optionFoo.getValue(), "inp"), 0);
-            CXXTOOLS_UNIT_ASSERT_EQUALS(optionBar.getValue(), 0);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(optionBar.getValue(), static_cast<const char*>(0));
             CXXTOOLS_UNIT_ASSERT_EQUALS(argc, 3);
             CXXTOOLS_UNIT_ASSERT_EQUALS(strcmp(argv[0], "prog"), 0);
             CXXTOOLS_UNIT_ASSERT_EQUALS(strcmp(argv[1], "-k"), 0);
             CXXTOOLS_UNIT_ASSERT_EQUALS(strcmp(argv[2], "bar"), 0);
-            CXXTOOLS_UNIT_ASSERT_EQUALS(argv[3], 0);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(argv[3], static_cast<const char*>(0));
         }
 
         void testArgpInt()
@@ -134,7 +135,7 @@ class ArgTest : public cxxtools::unit::TestSuite
             CXXTOOLS_UNIT_ASSERT_EQUALS(strcmp(argv[0], "prog"), 0);
             CXXTOOLS_UNIT_ASSERT_EQUALS(strcmp(argv[1], "-i"), 0);
             CXXTOOLS_UNIT_ASSERT_EQUALS(strcmp(argv[2], "--foo"), 0);
-            CXXTOOLS_UNIT_ASSERT_EQUALS(argv[3], 0);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(argv[3], static_cast<const char*>(0));
         }
 
         void testArgpCharp()
@@ -157,7 +158,7 @@ class ArgTest : public cxxtools::unit::TestSuite
             CXXTOOLS_UNIT_ASSERT_EQUALS(strcmp(argv[0], "prog"), 0);
             CXXTOOLS_UNIT_ASSERT_EQUALS(strcmp(argv[1], "-v"), 0);
             CXXTOOLS_UNIT_ASSERT_EQUALS(strcmp(argv[2], "42"), 0);
-            CXXTOOLS_UNIT_ASSERT_EQUALS(argv[3], 0);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(argv[3], static_cast<const char*>(0));
         }
 
         void testArgpStdString()
@@ -180,9 +181,24 @@ class ArgTest : public cxxtools::unit::TestSuite
             CXXTOOLS_UNIT_ASSERT_EQUALS(strcmp(argv[0], "prog"), 0);
             CXXTOOLS_UNIT_ASSERT_EQUALS(strcmp(argv[1], "-v"), 0);
             CXXTOOLS_UNIT_ASSERT_EQUALS(strcmp(argv[2], "42"), 0);
-            CXXTOOLS_UNIT_ASSERT_EQUALS(argv[3], 0);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(argv[3], static_cast<const char*>(0));
         }
 
+        void testArgChar()
+        {
+            int argc = 5;
+            char* argv[] = { arg("prog"), arg("-D"), arg("A"), arg("-F"), arg("\t"), 0 };
+
+            cxxtools::Arg<char> optionA(argc, argv, 'A');
+            cxxtools::Arg<char> optionD(argc, argv, 'D');
+            cxxtools::Arg<char> optionF(argc, argv, 'F');
+            CXXTOOLS_UNIT_ASSERT(!optionA.isSet());
+            CXXTOOLS_UNIT_ASSERT(optionD.isSet());
+            CXXTOOLS_UNIT_ASSERT(optionF.isSet());
+            CXXTOOLS_UNIT_ASSERT_EQUALS(*optionD, 'A');
+            CXXTOOLS_UNIT_ASSERT_EQUALS(*optionF, '\t');
+            CXXTOOLS_UNIT_ASSERT_EQUALS(argc, 1);
+        }
 };
 
 cxxtools::unit::RegisterTest<ArgTest> register_ArgTest;

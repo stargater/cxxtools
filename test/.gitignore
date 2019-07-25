@@ -1,4 +1,6 @@
 alltests
 rpcbenchclient
+rpcbenchasyncclient
 rpcbenchserver
 serializer-bench
+logbench

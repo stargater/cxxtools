@@ -24,6 +24,7 @@ nobase_include_HEADERS = \
         cxxtools/csvparser.h \
         cxxtools/csvserializer.h \
         cxxtools/char.h \
+        cxxtools/charmapcodec.h \
         cxxtools/cgi.h \
         cxxtools/clock.h \
         cxxtools/condition.h \
@@ -42,6 +43,7 @@ nobase_include_HEADERS = \
         cxxtools/dir.h \
         cxxtools/directory.h \
         cxxtools/dlloader.h \
+        cxxtools/envsubst.h \
         cxxtools/event.h \
         cxxtools/eventloop.h \
         cxxtools/eventsink.h \
@@ -54,6 +56,7 @@ nobase_include_HEADERS = \
         cxxtools/fileinfo.h \
         cxxtools/function.h \
         cxxtools/function.tpp \
+        cxxtools/hexdump.h \
         cxxtools/hdstream.h \
         cxxtools/hmac.h \
         cxxtools/http/client.h \
@@ -65,15 +68,31 @@ nobase_include_HEADERS = \
         cxxtools/http/server.h \
         cxxtools/http/service.h \
         cxxtools/http/responder.h \
+        cxxtools/inideserializer.h \
+        cxxtools/ini.h \
         cxxtools/inifile.h \
         cxxtools/iniparser.h \
+        cxxtools/iniserializer.h \
         cxxtools/invokable.h \
         cxxtools/invokable.tpp \
         cxxtools/ioerror.h \
         cxxtools/iodevice.h \
         cxxtools/iostream.h \
         cxxtools/iso8859_1codec.h \
+        cxxtools/iso8859_2codec.h \
+        cxxtools/iso8859_3codec.h \
+        cxxtools/iso8859_4codec.h \
+        cxxtools/iso8859_5codec.h \
+        cxxtools/iso8859_6codec.h \
+        cxxtools/iso8859_7codec.h \
+        cxxtools/iso8859_8codec.h \
+        cxxtools/iso8859_9codec.h \
+        cxxtools/iso8859_10codec.h \
+        cxxtools/iso8859_11codec.h \
+        cxxtools/iso8859_13codec.h \
+        cxxtools/iso8859_14codec.h \
         cxxtools/iso8859_15codec.h \
+        cxxtools/iso8859_16codec.h \
         cxxtools/join.h \
         cxxtools/json.h \
         cxxtools/json/httpclient.h \
@@ -121,10 +140,14 @@ nobase_include_HEADERS = \
         cxxtools/posix/pipestream.h \
         cxxtools/properties.h \
         cxxtools/propertiesdeserializer.h \
+        cxxtools/propertiesserializer.h \
         cxxtools/propertiesfile.h \
         cxxtools/propertiesparser.h \
+        cxxtools/ptrstreambuf.h \
+        cxxtools/ptrstream.h \
         cxxtools/query_params.h \
         cxxtools/queue.h \
+        cxxtools/quotedprintablecodec.h \
         cxxtools/quotedprintablestream.h \
         cxxtools/refcounted.h \
         cxxtools/regex.h \
@@ -132,6 +155,7 @@ nobase_include_HEADERS = \
         cxxtools/remoteexception.h \
         cxxtools/remoteprocedure.h \
         cxxtools/remoteresult.h \
+        cxxtools/resetter.h \
         cxxtools/scopedincrement.h \
         cxxtools/selector.h \
         cxxtools/selectable.h \
@@ -149,6 +173,9 @@ nobase_include_HEADERS = \
         cxxtools/slot.tpp \
         cxxtools/smartptr.h \
         cxxtools/sourceinfo.h \
+        cxxtools/sslcertificate.h \
+        cxxtools/stddevice.h \
+        cxxtools/stdstream.h \
         cxxtools/streambuffer.h \
         cxxtools/streamcounter.h \
         cxxtools/string.h \
@@ -166,14 +193,15 @@ nobase_include_HEADERS = \
         cxxtools/timespan.h \
         cxxtools/trim.h \
         cxxtools/typetraits.h \
+        cxxtools/tz.h \
         cxxtools/utf8.h \
         cxxtools/utf8codec.h \
         cxxtools/uuencode.h \
         cxxtools/void.h \
-        cxxtools/xmltag.h \
         cxxtools/log/cxxtools.h \
         cxxtools/unit/application.h \
         cxxtools/unit/assertion.h \
+        cxxtools/unit/jsonreporter.h \
         cxxtools/unit/registertest.h \
         cxxtools/unit/reporter.h \
         cxxtools/unit/test.h \
@@ -184,6 +212,7 @@ nobase_include_HEADERS = \
         cxxtools/unit/testmethod.h \
         cxxtools/unit/testprotocol.h \
         cxxtools/unit/testsuite.h \
+        cxxtools/xml/attribute.h \
         cxxtools/xml/characters.h \
         cxxtools/xml/comment.h \
         cxxtools/xml/doctypedeclaration.h \

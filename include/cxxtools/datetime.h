@@ -38,6 +38,8 @@ namespace cxxtools
 {
 
 class SerializationInfo;
+class LocalDateTime;
+class UtcDateTime;
 
 /** @brief Combined %Date and %Time value
     @ingroup DateTime
@@ -55,24 +57,36 @@ class DateTime
               %Y   4 digit year
               %y   2 digit year
               %m   month (1-12)
+              %2m  month (01-12)
+              %O   english monthname (Jan-Dec)
               %d   day (1-31)
+              %2d  day (01-31)
               %H   hours (0-23)
+              %2H  hours (00-23)
               %I   hours (0-11)
-              %M   minutes
-              %S   seconds
-              %j   milliseconds (1-3 digits, optionally leading '.')
-              %J   milliseconds (1-3 digits, with leading '.')
+              %2I  hours (00-11)
+              %M   minutes (0-59)
+              %2M  minutes (00-59)
+              %S   seconds (0-59)
+              %2S  seconds (00-59)
+              %j   fractional seconds (1-6 digits, optionally leading '.')
+              %J   fractional seconds (1-6 digits, with leading '.')
               %K   milliseconds (3 digits, with leading '.')
               %k   milliseconds (3 digits)
+              %U   microseconds (6 digits, with leading '.')
+              %u   microseconds (6 digits)
               %p   AM/PM
+              ?    arbitrary character
+              *    skip non digit characters
+              #    skip word
          */
         explicit DateTime(const std::string& d, const std::string& fmt = "%Y-%m-%d %H:%M:%S%j");
 
         DateTime(int year, unsigned month, unsigned day,
                  unsigned hour, unsigned minute, 
-                 unsigned second, unsigned msec = 0)
+                 unsigned second, unsigned msec = 0, unsigned usec = 0)
         : _date(year, month, day)
-        , _time(hour, minute, second, msec)
+        , _time(hour, minute, second, msec, usec)
         { }
 
         DateTime(const Date& date, const Time& time)
@@ -80,60 +94,68 @@ class DateTime
           _time(time)
         { }
 
-        static DateTime fromJulianDays(unsigned julianDays)
-        {
-            return DateTime(julianDays);
-        }
-
         /** @brief Creates a DateTime object relative to the Unix epoch.
 
-            The DateTime will be relative to the unix-epoch (Jan 1st 1970)
-            by the milli-seconds specified by \a msecsSinceEpoch. The
+            The DateTime will be relative to the unix epoch (Jan 1st 1970)
+            by the milli seconds specified by \a msecsSinceEpoch. The
             construction does not take care of any time zones. I.e. the
             milliseconds will be treated as if they were in the same time
             zone as the reference (January 1st 1970). Thus specifying a
-            "time-zoned" millisecond value will lead to a "time-zoned"
+            "time zoned" millisecond value will lead to a "time zoned"
             DateTime. And accordingly a "GMT" millisecond value will lead
             to a "GMT" DateTime.
         */
-        static inline DateTime fromMSecsSinceEpoch(const int64_t msecsSinceEpoch)
+        static DateTime fromMSecsSinceEpoch(cxxtools::Milliseconds sinceEpoch)
         {
             static const DateTime dt(1970, 1, 1, 0, 0, 0);
-            Timespan ts(msecsSinceEpoch*1000);
-            return dt + ts;
+            return dt + sinceEpoch;
         }
 
-        DateTime& operator=(unsigned julianDay);
+        /// Returns the GMT time
+        static UtcDateTime gmtime();
 
+        /// Returns the local time
+        static LocalDateTime localtime();
+
+        /// Sets the date and time.
         void set(int year, unsigned month, unsigned day,
-                 unsigned hour, unsigned min, unsigned sec, unsigned msec = 0);
+                 unsigned hour, unsigned min, unsigned sec, unsigned msec = 0, unsigned usec = 0);
 
+        /// Returns the components of the date time.
         void get(int& year, unsigned& month, unsigned& day,
                  unsigned& hour, unsigned& min, unsigned& sec, unsigned& msec) const;
 
+        /// Returns the components of the date time.
+        void get(int& year, unsigned& month, unsigned& day,
+                 unsigned& hour, unsigned& min, unsigned& sec, unsigned& msec, unsigned& usec) const;
+
+        /// Returns the date part of the DateTime object.
         const Date& date() const
         { return _date; }
 
+        /// Set the date part and keeps the time of the DateTime object.
         DateTime& setDate(const Date& date)
         { _date = date; return *this; }
 
+        /// Returns the time part of the DateTime object.
         const Time& time() const
         { return _time; }
 
+        /// Set the time part and keeps the date of the DateTime object.
         DateTime& setTime(const Time& time)
         { _time = time; return *this; }
 
-        /** @brief Returns the day-part of the date.
+        /** @brief Returns the day part of the date.
         */
         unsigned day() const
         { return date().day(); }
 
-        /** @brief Returns the month-part of the date.
+        /** @brief Returns the month part of the date.
         */
         unsigned month() const
         { return date().month(); }
 
-        /** @brief Returns the year-part of the date.
+        /** @brief Returns the year part of the date.
         */
         int year() const
         { return date().year(); }
@@ -143,55 +165,65 @@ class DateTime
         unsigned dayOfWeek() const
         { return date().dayOfWeek(); }
 
-        /** \brief Returns the hour-part of the Time.
+        /** \brief Returns the hour part of the Time.
         */
         unsigned hour() const
         { return time().hour(); }
 
-        /** \brief Returns the minute-part of the Time.
+        /** \brief Returns the minute part of the Time.
         */
         unsigned minute() const
         { return time().minute(); }
 
-        /** \brief Returns the second-part of the Time.
+        /** \brief Returns the second part of the Time.
         */
         unsigned second() const
         { return time().second(); }
 
-        /** \brief Returns the millisecond-part of the Time.
+        /** \brief Returns the millisecond part of the Time.
         */
         unsigned msec() const
         { return time().msec(); }
 
-        /** @brief Returns the milliseconds relative to the Unix-epoch.
+        /** @brief Returns the milliseconds relative to the Unix epoch.
 
             The calculation does currently not take care of any time zones.
             I.e. the milliseconds will be calculated as if they were in the
             same time zone as the reference (January 1st 1970). Thus calling
-            this API on a "time-zoned" DateTime will lead to a "time-zoned"
+            this API on a "time zoned" DateTime will lead to a "time zoned"
             millisecond value. And  accordingly calling this API on a "GMT"
             DateTime will lead to a "GMT" millisecond value.
         */
-        int64_t msecsSinceEpoch() const;
+        Milliseconds msecsSinceEpoch() const;
 
         /** \brief format Date into a string using a format string
 
             Valid format codes are:
 
-              %d   day (1-31)
-              %m   month (1-12)
+              %d   day (01-31)
+              %1d  day (1-31)
+              %m   month (01-12)
+              %1m  month (1-12)
+              %O   english monthname (Jan-Dec)
               %Y   4 digit year
               %y   2 digit year
               %w   day of week (0-6 sunday=6)
               %W   day of week (1-7 sunday=7)
-              %H   hours (0-23)
-              %H   hours (0-11)
-              %M   minutes
-              %S   seconds
-              %j   milliseconds (1-3 digits, optionally leading '.')
-              %J   milliseconds (1-3 digits, with leading '.')
+              %N   day of week as english abbrivation (Mon-Sun)
+              %H   hours (00-23)
+              %1H  hours (0-23)
+              %I   hours (00-11)
+              %1I  hours (0-11)
+              %M   minutes (00-59)
+              %1M  minutes (0-59)
+              %S   seconds (00-59)
+              %1S  seconds (0-59)
+              %j   fractional seconds (1-6 digits, optionally leading '.')
+              %J   fractional seconds (1-6 digits, with leading '.')
               %K   milliseconds (3 digits, with leading '.')
               %k   milliseconds (3 digits)
+              %U   microseconds (6 digits, with leading '.')
+              %u   microseconds (6 digits)
               %p   am/pm
               %P   AM/PM
          */
@@ -223,7 +255,8 @@ class DateTime
 
         /** @brief Assignment by difference operator
         */
-        DateTime& operator-=(const Timespan& ts);
+        DateTime& operator-=(const Timespan& ts)
+        { return operator+= (-ts); }
 
         friend Timespan operator-(const DateTime& first, const DateTime& second);
 
@@ -260,11 +293,6 @@ class DateTime
         }
 
     private:
-        DateTime(unsigned jd)
-        : _date(jd)
-        {}
-
-    private:
         Date _date;
         Time _time;
 };
@@ -273,19 +301,74 @@ void operator >>=(const SerializationInfo& si, DateTime& dt);
 
 void operator <<=(SerializationInfo& si, const DateTime& dt);
 
-inline DateTime& DateTime::operator=(unsigned julianDay)
+/// Same ad DateTime - just a separate type for local date time better type safety
+class LocalDateTime : public DateTime
 {
-    _time = Time(0, 0, 0, 0);
-    _date.setJulian(julianDay);
-    return *this;
-}
+public:
+    LocalDateTime() { }
+
+    explicit LocalDateTime(const std::string& d, const std::string& fmt = "%Y-%m-%d %H:%M:%S%j")
+        : DateTime(d, fmt)
+        { }
+
+    LocalDateTime(int year, unsigned month, unsigned day,
+             unsigned hour, unsigned minute,
+             unsigned second, unsigned msec = 0, unsigned usec = 0)
+        : DateTime(year, month, day, hour, minute, second, msec, usec)
+        { }
+
+    LocalDateTime(const Date& date, const Time& time)
+        : DateTime(date, time)
+        { }
+
+    explicit LocalDateTime(const DateTime& dt)
+        : DateTime(dt)
+        { }
+};
+
+/// Same ad DateTime - just a separate type for utc date time better type safety
+class UtcDateTime : public DateTime
+{
+public:
+    UtcDateTime() { }
+
+    explicit UtcDateTime(const std::string& d, const std::string& fmt = "%Y-%m-%d %H:%M:%S%j")
+        : DateTime(d, fmt)
+        { }
+
+    UtcDateTime(int year, unsigned month, unsigned day,
+             unsigned hour, unsigned minute,
+             unsigned second, unsigned msec = 0, unsigned usec = 0)
+        : DateTime(year, month, day, hour, minute, second, msec, usec)
+        { }
+
+    UtcDateTime(const Date& date, const Time& time)
+        : DateTime(date, time)
+        { }
+
+    explicit UtcDateTime(const DateTime& dt)
+        : DateTime(dt)
+        { }
+};
+
+inline void operator>>= (const SerializationInfo& si, LocalDateTime& dt)
+{ si >>= static_cast<DateTime&>(dt); }
+
+inline void operator<<= (SerializationInfo& si, const LocalDateTime& dt)
+{ si <<= static_cast<const DateTime&>(dt); }
+
+inline void operator>>= (const SerializationInfo& si, UtcDateTime& dt)
+{ si >>= static_cast<DateTime&>(dt); }
+
+inline void operator<<= (SerializationInfo& si, const UtcDateTime& dt)
+{ si <<= static_cast<const DateTime&>(dt); }
 
 
 inline void DateTime::set(int year, unsigned month, unsigned day,
-                   unsigned hour, unsigned minute, unsigned second, unsigned msec)
+                   unsigned hour, unsigned minute, unsigned second, unsigned msec, unsigned usec)
 {
     _date.set(year, month, day);
-    _time.set(hour, minute, second, msec);
+    _time.set(hour, minute, second, msec, usec);
 }
 
 
@@ -294,6 +377,14 @@ inline void DateTime::get(int& y, unsigned& month, unsigned& d,
 {
     _date.get(y, month, d);
     _time.get(h, min, s, ms);
+}
+
+
+inline void DateTime::get(int& y, unsigned& month, unsigned& d,
+                   unsigned& h, unsigned& min, unsigned& s, unsigned& ms, unsigned& usec) const
+{
+    _date.get(y, month, d);
+    _time.get(h, min, s, ms, usec);
 }
 
 

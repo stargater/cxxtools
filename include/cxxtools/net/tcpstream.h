@@ -40,55 +40,71 @@ namespace cxxtools
 
 namespace net
 {
-    class TcpStream : public IOStream, public Connectable
+    /** A buffered TCP/IP stream which supports asyncronous communication.
+     *
+     *  When a object is created a buffer size is passed. By default the buffer size
+     *  is 0, which means, that the buffer is dynamically extended when needed so that
+     *  writing do not block.
+     */
+    class TcpStream : public IOStream
     {
-            void init(std::size_t timeout);
+            void init(cxxtools::Timespan timeout);
 
         public:
-            explicit TcpStream(unsigned bufsize = 8192, std::size_t timeout = Selectable::WaitInfinite)
-            : IOStream(bufsize)
+            /// Creates a not connected TCP stream object.
+            explicit TcpStream(unsigned bufsize = 0, cxxtools::Milliseconds timeout = Selectable::WaitInfinite)
+            : IOStream(bufsize > 0 ? bufsize : 8192, bufsize == 0),
+              acceptSslCertificate(_socket.acceptSslCertificate)
             {
                 init(timeout);
             }
 
+            /// Creates a TCP stream object and connects to the specified IP address and port.
             TcpStream(const std::string& ipaddr, unsigned short int port,
-                      unsigned bufsize = 8192, std::size_t timeout = Selectable::WaitInfinite)
-            : IOStream(bufsize)
-            , _socket(ipaddr, port)
+                      unsigned bufsize = 0, cxxtools::Milliseconds timeout = Selectable::WaitInfinite)
+            : IOStream(bufsize > 0 ? bufsize : 8192, bufsize == 0),
+              acceptSslCertificate(_socket.acceptSslCertificate),
+              _socket(ipaddr, port)
             {
                 init(timeout);
             }
 
+            /// Creates a TCP stream object and connects to the specified address info.
             explicit TcpStream(const AddrInfo& addrinfo,
-                      unsigned bufsize = 8192, std::size_t timeout = Selectable::WaitInfinite)
-            : IOStream(bufsize)
-            , _socket(addrinfo)
+                      unsigned bufsize = 0, cxxtools::Milliseconds timeout = Selectable::WaitInfinite)
+            : IOStream(bufsize > 0 ? bufsize : 8192, bufsize == 0),
+              acceptSslCertificate(_socket.acceptSslCertificate),
+              _socket(addrinfo)
             {
                 init(timeout);
             }
 
+            /// Creates a TCP stream object and connects to the specified IP address and port.
             TcpStream(const char* ipaddr, unsigned short int port,
-                      unsigned bufsize = 8192, std::size_t timeout = Selectable::WaitInfinite)
-            : IOStream(bufsize)
-            , _socket(ipaddr, port)
+                      unsigned bufsize = 8192, cxxtools::Milliseconds timeout = Selectable::WaitInfinite)
+            : IOStream(bufsize, true),
+              acceptSslCertificate(_socket.acceptSslCertificate),
+              _socket(ipaddr, port)
             {
                 init(timeout);
             }
 
+            /// Creates a TCP stream object and accepts a connection from a server.
             explicit TcpStream(TcpServer& server, unsigned bufsize = 8192,
-                      unsigned flags = 0, std::size_t timeout = Selectable::WaitInfinite)
-            : IOStream(bufsize)
-            , _socket(server, flags)
+                      unsigned flags = 0, cxxtools::Milliseconds timeout = Selectable::WaitInfinite)
+            : IOStream(bufsize, true),
+              acceptSslCertificate(_socket.acceptSslCertificate),
+              _socket(server, flags)
             {
                 init(timeout);
             }
 
             /// Set timeout to the given value in milliseconds.
-            void setTimeout(std::size_t timeout)
+            void setTimeout(Milliseconds timeout)
             { _socket.setTimeout(timeout); }
 
             /// Returns the current value for timeout in milliseconds.
-            std::size_t getTimeout() const
+            Milliseconds getTimeout() const
             { return _socket.getTimeout(); }
 
             void close()
@@ -121,8 +137,47 @@ namespace net
             bool isConnected() const
             { return _socket.isConnected(); }
 
+            bool isSslConnected() const
+            { return _socket.isSslConnected(); }
+
             int getFd() const
             { return _socket.getFd(); }
+
+            void loadSslCertificateFile(const std::string& certFile, const std::string& privateKeyFile = std::string())
+            { _socket.loadSslCertificateFile(certFile, privateKeyFile); }
+
+            void setSslVerify(int level, const std::string& ca = std::string())
+            { _socket.setSslVerify(level, ca); }
+
+            bool hasSslPeerCertificate() const
+            { return _socket.hasSslPeerCertificate(); }
+
+            const SslCertificate& getSslPeerCertificate() const
+            { return _socket.getSslPeerCertificate(); }
+
+            // initiates a ssl connection on the socket
+            void sslConnect()
+            { _socket.sslConnect(); }
+            void beginSslConnect()
+            { _socket.beginSslConnect(); }
+            void endSslConnect()
+            { _socket.endSslConnect(); }
+
+            // accept a ssl connection from the peer
+            void sslAccept()
+            { _socket.sslAccept(); }
+            void beginSslAccept()
+            { _socket.beginSslAccept(); }
+            void endSslAccept()
+            { _socket.endSslAccept(); }
+
+            // terminates ssl
+            void sslShutdown()
+            { _socket.sslShutdown(); }
+            void beginSslShutdown()
+            { _socket.beginSslShutdown(); }
+            void endSslShutdown()
+            { _socket.endSslShutdown(); }
 
             TcpSocket& socket()
             { return _socket; }
@@ -154,6 +209,11 @@ namespace net
              */
             Signal<TcpStream&> closed;
 
+            Signal<TcpStream&> sslAccepted;
+            Signal<TcpStream&> sslConnected;
+            Signal<TcpStream&> sslClosed;
+            Delegate<bool, const SslCertificate&>& acceptSslCertificate;
+
         private:
             TcpSocket _socket;
 
@@ -161,6 +221,9 @@ namespace net
             void onOutput(IODevice&);
             void onConnected(TcpSocket&);
             void onClosed(TcpSocket&);
+            void onSslAccepted(TcpSocket&);
+            void onSslConnected(TcpSocket&);
+            void onSslClosed(TcpSocket&);
     };
 
     typedef TcpStream iostream;

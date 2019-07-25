@@ -31,7 +31,9 @@
 
 #include <cxxtools/composer.h>
 #include <cxxtools/bin/parser.h>
+
 #include <string>
+#include <iosfwd>
 
 namespace cxxtools
 {
@@ -44,14 +46,18 @@ namespace cxxtools
             public:
                 Scanner()
                     : _state(state_0),
-                      _failed(false)
+                      _deserializer(0),
+                      _composer(0),
+                      _count(0),
+                      _failed(false),
+                      _errorCode(0)
                 { }
 
                 void begin(Deserializer& handler, IComposer& composer);
 
-                bool advance(char ch);
+                bool advance(std::streambuf& in);
 
-                void checkException();
+                void finish();
 
             private:
                 enum

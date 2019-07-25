@@ -76,6 +76,7 @@ int main(int argc, char* argv[])
     cxxtools::Arg<unsigned short> port(argc, argv, 'p', 7002);
     cxxtools::Arg<unsigned short> bport(argc, argv, 'b', 7003);
     cxxtools::Arg<unsigned short> jport(argc, argv, 'j', 7004);
+    cxxtools::Arg<std::string> sslCert(argc, argv, 'c');
     cxxtools::Arg<unsigned> threads(argc, argv, 't', 4);
     cxxtools::Arg<unsigned> maxThreads(argc, argv, 'T', 200);
 
@@ -85,13 +86,14 @@ int main(int argc, char* argv[])
                  "   -p number  set port number for http (xmlrpc and json over http, default: 7002)\n"
                  "   -b number  set port number run binary rpc server (default: 7003)\n"
                  "   -j number  set port number run json rpc server (default: 7004)\n"
+                 "   -c cert    enable ssl using the specified server certificate\n"
                  "   -t number  set minimum number of threads (default: 4)\n"
                  "   -T number  set maximum number of threads (default: 200)\n"
               << std::endl;
 
     cxxtools::EventLoop loop;
 
-    cxxtools::http::Server server(loop, ip, port);
+    cxxtools::http::Server server(loop, ip, port, sslCert);
     server.minThreads(threads);
     server.maxThreads(maxThreads);
     cxxtools::xmlrpc::Service service;
@@ -100,12 +102,12 @@ int main(int argc, char* argv[])
     service.registerFunction("objects", objects);
     server.addService("/xmlrpc", service);
 
-    cxxtools::bin::RpcServer binServer(loop, ip, bport);
+    cxxtools::bin::RpcServer binServer(loop, ip, bport, sslCert);
     binServer.minThreads(threads);
     binServer.maxThreads(maxThreads);
     binServer.addService(service);
 
-    cxxtools::json::RpcServer jsonServer(loop, ip, jport);
+    cxxtools::json::RpcServer jsonServer(loop, ip, jport, sslCert);
     jsonServer.minThreads(threads);
     jsonServer.maxThreads(maxThreads);
     jsonServer.addService("", service);

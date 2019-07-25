@@ -28,11 +28,15 @@
 
 #include "tcpsocketimpl.h"
 #include "cxxtools/net/tcpsocket.h"
-#include <stdexcept>
 #include "cxxtools/log.h"
+#include "cxxtools/systemerror.h"
+#include "cxxtools/ioerror.h"
+#include "cxxtools/sslcertificate.h"
+
+#include <stdexcept>
 #include <errno.h>
-#include <cxxtools/systemerror.h>
-#include <cxxtools/ioerror.h>
+
+#include "config.h"
 
 log_define("cxxtools.net.tcpsocket")
 
@@ -133,7 +137,8 @@ Milliseconds TcpSocket::timeout() const
 void TcpSocket::connect(const AddrInfo& addrinfo)
 {
     close();
-    _impl->connect(addrinfo);
+    _impl->beginConnect(addrinfo);
+    _impl->endConnect();
     setEnabled(true);
     setAsync(true);
     setEof(false);
@@ -148,7 +153,7 @@ bool TcpSocket::beginConnect(const AddrInfo& addrinfo)
     setAsync(true);
     setEof(false);
 
-    if(ret)
+    if (ret)
         connected(*this);
     return ret;
 }
@@ -174,11 +179,144 @@ bool TcpSocket::isConnected() const
 }
 
 
+bool TcpSocket::isSslConnected() const
+{
+#ifdef WITH_SSL
+    return _impl->isSslConnected();
+#else
+    return false;
+#endif
+}
+
+
 int TcpSocket::getFd() const
 {
     return _impl->fd();
 }
 
+
+void TcpSocket::loadSslCertificateFile(const std::string& certFile, const std::string& privateKeyFile)
+{
+#ifdef WITH_SSL
+    _impl->loadSslCertificateFile(certFile, privateKeyFile);
+#else
+    log_warn("can't load certificate file since ssl is disabled");
+#endif
+}
+
+void TcpSocket::setSslVerify(int level, const std::string& ca)
+{
+#ifdef WITH_SSL
+    _impl->setSslVerify(level, ca);
+#else
+    log_warn("can't set ssl verify level since ssl is disabled");
+#endif
+}
+
+bool TcpSocket::hasSslPeerCertificate() const
+{
+#ifdef WITH_SSL
+    return getSslPeerCertificate();
+#else
+    return false;
+#endif
+}
+
+const SslCertificate& TcpSocket::getSslPeerCertificate() const
+{
+#ifdef WITH_SSL
+    return _impl->getSslPeerCertificate();
+#else
+    log_warn("can't get ssl peer certificate since ssl is disabled");
+    static SslCertificate cert;
+    return cert;
+#endif
+}
+
+void TcpSocket::beginSslConnect()
+{
+#ifdef WITH_SSL
+    if (_impl->beginSslConnect())
+        sslConnected(*this);
+#else
+    log_warn("can't connect ssl since ssl is disabled");
+    sslConnected(*this);
+#endif
+}
+
+void TcpSocket::endSslConnect()
+{
+#ifdef WITH_SSL
+    _impl->endSslConnect();
+#endif
+}
+
+void TcpSocket::sslConnect()
+{
+#ifdef WITH_SSL
+    _impl->beginSslConnect();
+    _impl->endSslConnect();
+#else
+    log_warn("can't connect ssl since ssl is disabled");
+    sslConnected(*this);
+#endif
+}
+
+void TcpSocket::beginSslAccept()
+{
+#ifdef WITH_SSL
+    if (_impl->beginSslAccept())
+        sslAccepted(*this);
+#else
+    log_warn("can't accept ssl connection since ssl is disabled");
+    sslAccepted(*this);
+#endif
+}
+
+void TcpSocket::endSslAccept()
+{
+#ifdef WITH_SSL
+    _impl->endSslAccept();
+#endif
+}
+
+void TcpSocket::sslAccept()
+{
+#ifdef WITH_SSL
+    _impl->beginSslAccept();
+    _impl->endSslAccept();
+#else
+    log_warn("can't accept ssl connection since ssl is disabled");
+#endif
+}
+
+void TcpSocket::beginSslShutdown()
+{
+#ifdef WITH_SSL
+    if (_impl->beginSslShutdown())
+        sslClosed(*this);
+#else
+    log_warn("can't shutdown ssl connection since ssl is disabled");
+    sslClosed(*this);
+#endif
+}
+
+void TcpSocket::endSslShutdown()
+{
+#ifdef WITH_SSL
+    _impl->endSslShutdown();
+#endif
+}
+
+void TcpSocket::sslShutdown()
+{
+#ifdef WITH_SSL
+    _impl->beginSslShutdown();
+    _impl->endSslShutdown();
+#else
+    log_warn("can't shutdown ssl connection since ssl is disabled");
+#endif
+}
 
 void TcpSocket::accept(const TcpServer& server, unsigned flags)
 {
@@ -196,93 +334,25 @@ SelectableImpl& TcpSocket::simpl()
 }
 
 
-void TcpSocket::onClose()
-{
-    cancel();
-    _impl->close();
-}
-
-
-bool TcpSocket::onWait(Timespan timeout)
-{
-    return _impl->wait(timeout);
-}
-
-
-void TcpSocket::onAttach(SelectorBase& sb)
-{
-    _impl->attach(sb);
-}
-
-
-void TcpSocket::onDetach(SelectorBase& sb)
-{
-    _impl->detach(sb);
-}
-
-
 size_t TcpSocket::onBeginRead(char* buffer, size_t n, bool& eof)
 {
     if (!_impl->isConnected())
-        throw IOPending("connect operation pending");
+        throw IOError("socket not connected when trying to read");
 
     return _impl->beginRead(buffer, n, eof);
 }
 
-
-size_t TcpSocket::onEndRead(bool& eof)
-{
-    return _impl->endRead(eof);
-}
-
-
-size_t TcpSocket::onRead(char* buffer, size_t count, bool& eof)
-{
-    return _impl->read(buffer, count, eof);
-}
-
-
 size_t TcpSocket::onBeginWrite(const char* buffer, size_t n)
 {
     if (!_impl->isConnected())
-        throw IOPending("connect operation pending");
+        throw IOError("socket not connected when trying to write");
 
     return _impl->beginWrite(buffer, n);
 }
 
-
-size_t TcpSocket::onEndWrite()
-{
-    return _impl->endWrite();
-}
-
-
-size_t TcpSocket::onWrite(const char* buffer, size_t count)
-{
-    return _impl->write(buffer, count);
-}
-
-
-void TcpSocket::onCancel()
-{
-    if (_impl->isConnected())
-    {
-        _impl->cancel();
-    }
-    else if (enabled())
-    {
-        // we are in connecting state
-        _impl->close();
-        setEnabled(false);
-    }
-}
-
-
 IODeviceImpl& TcpSocket::ioimpl()
 {
-    throw std::runtime_error("TcpSocket::ioimpl() not implemented");
-    IODeviceImpl* impl = 0;
-    return *impl;
+    return *_impl;
 }
 
 short TcpSocket::poll(short events) const

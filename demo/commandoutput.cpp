@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004 Tommi Maekitalo
+ * Copyright (C) 2011 Tommi Maekitalo
  * 
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -26,62 +26,31 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-#include "cxxtools/xmltag.h"
 #include <iostream>
+#include <cxxtools/posix/commandoutput.h>
 
-namespace cxxtools
+// example for starting a sub process and reading its output through a stream
+//
+int main(int argc, char* argv[])
 {
-
-std::ostream* Xmltag::default_out = &std::cout;
-
-Xmltag::Xmltag(const std::string& tag_, std::ostream& out_)
-  : tag(tag_),
-    out(out_)
-{
-  if (!tag.empty())
+  try
   {
-    if (tag.at(0) == '<' && tag.at(tag.size() - 1) == '>')
-      tag = tag.substr(1, tag.size() - 2);
+    // create a class of type CommandOutput
+    cxxtools::posix::CommandOutput ls("ls");
 
-    out << '<' << tag << '>';
+    // add some parameters
+    ls.push_back("-l");
+    ls.push_back("/bin");
+
+    // run the process
+    ls.run();
+
+    // read the output of the process (copy it to std::cout here)
+    std::cout << ls.rdbuf();
+  }
+  catch (const std::exception& e)
+  {
+    std::cerr << e.what() << std::endl;
   }
 }
 
-Xmltag::Xmltag(const std::string& tag_, const std::string& parameter,
-  std::ostream& out_)
-  : tag(tag_),
-    out(out_)
-{
-  if (!tag.empty())
-  {
-    if (tag.at(0) == '<' && tag.at(tag.size() - 1) == '>')
-      tag = tag.substr(1, tag.size() - 2);
-
-    out << '<' << tag;
-
-    if (!parameter.empty())
-      out << ' ' << parameter;
-
-    out << '>';
-  }
-}
-
-void Xmltag::close()
-{
-  if (!tag.empty())
-  {
-    out << "</";
-
-    std::string::size_type p = tag.find(' ');
-    if (p != std::string::npos)
-      out.write(tag.data(), p);
-    else
-      out << tag;
-
-    out << '>';
-
-    tag.clear();
-  }
-}
-
-}

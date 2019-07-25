@@ -33,20 +33,9 @@ namespace cxxtools
 {
 namespace json
 {
-RpcServer::RpcServer(EventLoopBase& eventLoop)
-    : _impl(new RpcServerImpl(eventLoop, runmodeChanged, *this))
-{ }
-
-RpcServer::RpcServer(EventLoopBase& eventLoop, const std::string& ip, unsigned short int port, int backlog)
-    : _impl(new RpcServerImpl(eventLoop, runmodeChanged, *this))
+RpcServerImpl* RpcServer::newImpl(EventLoopBase& eventLoop)
 {
-    listen(ip, port, backlog);
-}
-
-RpcServer::RpcServer(EventLoopBase& eventLoop, unsigned short int port, int backlog)
-    : _impl(new RpcServerImpl(eventLoop, runmodeChanged, *this))
-{
-    listen(port, backlog);
+    return new RpcServerImpl(eventLoop, runmodeChanged, *this);
 }
 
 RpcServer::~RpcServer()
@@ -54,24 +43,19 @@ RpcServer::~RpcServer()
     delete _impl;
 }
 
-void RpcServer::addService(const std::string& praefix, const ServiceRegistry& service)
+void RpcServer::listen(const std::string& ip, unsigned short int port, const std::string& certificateFile, const std::string& privateKeyFile, int sslVerifyLevel, const std::string& sslCa)
+{
+    _impl->listen(ip, port, certificateFile, privateKeyFile, sslVerifyLevel, sslCa);
+}
+
+void RpcServer::addService(const std::string& prefix, const ServiceRegistry& service)
 {
     std::vector<std::string> procs = service.getProcedureNames();
 
     for (std::vector<std::string>::const_iterator it = procs.begin(); it != procs.end(); ++it)
     {
-        registerProcedure(praefix + *it, service.getProcedure(*it));
+        registerProcedure(prefix + *it, service.getProcedure(*it));
     }
-}
-
-void RpcServer::listen(const std::string& ip, unsigned short int port, int backlog)
-{
-    _impl->listen(ip, port, backlog);
-}
-
-void RpcServer::listen(unsigned short int port, int backlog)
-{
-    _impl->listen(std::string(), port, backlog);
 }
 
 unsigned RpcServer::minThreads() const
@@ -92,6 +76,11 @@ unsigned RpcServer::maxThreads() const
 void RpcServer::maxThreads(unsigned m)
 {
     _impl->maxThreads(m);
+}
+
+Delegate<bool, const SslCertificate&>& RpcServer::acceptSslCertificate()
+{
+    return _impl->acceptSslCertificate;
 }
 
 }

@@ -28,13 +28,13 @@
 #ifndef cxxtools_Settings_h
 #define cxxtools_Settings_h
 
-#include <cxxtools/string.h>
 #include <cxxtools/serializationinfo.h>
-#include <iostream>
-#include <sstream>
-#include <cassert>
+#include <cxxtools/serializationerror.h>
 
-namespace cxxtools {
+#include <iostream>
+
+namespace cxxtools
+{
 
 class SettingsError : public cxxtools::SerializationError
 {
@@ -53,6 +53,7 @@ class SettingsError : public cxxtools::SerializationError
 };
 
 
+/// @deprecated
 class Settings : public cxxtools::SerializationInfo
 {
     public:
@@ -63,7 +64,7 @@ class Settings : public cxxtools::SerializationInfo
         void save( std::basic_ostream<cxxtools::Char>& os ) const;
 
         template <typename T>
-        const bool getObject(T& type, const std::string& name) const
+        bool getObject(T& type, const std::string& name) const
         {
             const cxxtools::SerializationInfo* si = this->findMember(name);
             if(si == 0)
@@ -74,7 +75,7 @@ class Settings : public cxxtools::SerializationInfo
         }
 
         template <typename T>
-        const void setObject(const T& type, const std::string& name)
+        void setObject(const T& type, const std::string& name)
         {
             SerializationInfo& si = this->addMember(name);
             si <<= type;

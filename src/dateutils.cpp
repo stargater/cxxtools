@@ -29,17 +29,47 @@
 #include "dateutils.h"
 #include <stdexcept>
 #include <cctype>
+#include <string.h>
 
 namespace cxxtools
 {
+  const char* weekdaynames[7] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+
+  const char* monthnames[12] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+
+  void skipNonDigit(std::string::const_iterator& b, std::string::const_iterator e)
+  {
+    while (b != e && !std::isdigit(*b))
+      ++b;
+  }
+
+  void skipWord(std::string::const_iterator& b, std::string::const_iterator e)
+  {
+    while (b != e && std::isalnum(*b))
+      ++b;
+  }
+
   unsigned getUnsigned(std::string::const_iterator& b, std::string::const_iterator e, unsigned digits)
   {
     if (b == e || !std::isdigit(*b))
-      throw std::runtime_error("invalid date format");
+      throw std::invalid_argument("invalid date format");
 
     unsigned ret = 0;
-    for (unsigned d = 0; d < digits && b < e && std::isdigit(*b); ++d, ++b)
+    for (unsigned d = 0; d < digits && b != e && std::isdigit(*b); ++d, ++b)
       ret = ret * 10 + (*b - '0');
+
+    return ret;
+  }
+
+  unsigned getUnsignedF(std::string::const_iterator& b, std::string::const_iterator e, unsigned digits)
+  {
+    unsigned ret = 0;
+    for (unsigned d = 0; d < digits; ++d, ++b)
+    {
+      if (b == e || !std::isdigit(*b))
+        throw std::invalid_argument("invalid date format");
+      ret = ret * 10 + (*b - '0');
+    }
 
     return ret;
   }
@@ -60,70 +90,70 @@ namespace cxxtools
     }
 
     if (b == e || !std::isdigit(*b))
-      throw std::runtime_error("invalid date format");
+      throw std::invalid_argument("invalid date format");
 
     int ret = 0;
-    for (unsigned d = 0; d < digits && b < e && std::isdigit(*b); ++d, ++b)
+    for (unsigned d = 0; d < digits && b != e && std::isdigit(*b); ++d, ++b)
       ret = ret * 10 + (*b - '0');
 
     return ret * sgn;
   }
 
-  unsigned getMilliseconds(std::string::const_iterator& b, std::string::const_iterator e)
+  unsigned getMicroseconds(std::string::const_iterator& b, std::string::const_iterator e, unsigned digits)
   {
     unsigned m = 0;
+    unsigned d = 100000;
 
-    if (!std::isdigit(*b))  // nothing
-      return 0;
+    for (unsigned c = 0; c < digits; ++c)
+    {
+      if (b == e || !std::isdigit(*b))
+        return m;
 
-    m = (*b++ - '0') * 100;
-    if (!std::isdigit(*b))  // .4  => 400 msec
-      return m;
+      m += (*b++ - '0') * d;
+      d /= 10;
+    }
 
-    m += (*b++ - '0') * 10;
-    if (!std::isdigit(*b))  // .43  => 430 msec
-      return m;
-
-    m += (*b++ - '0');       // .432 => 432 msec
     return m;
   }
 
-  void appendD4(std::string& s, unsigned v)
+  void appendDn(std::string& s, unsigned short n, unsigned v)
   {
-      char d[4];
-      d[3] = '0' + v % 10;
-      v /= 10;
-      d[2] = '0' + v % 10;
-      v /= 10;
-      d[1] = '0' + v % 10;
-      v /= 10;
-      d[0] = '0' + v % 10;
-      s.append(d, 4);
+      s.resize(s.size() + n);
+      for (unsigned short i = 0; i < n; ++i)
+      {
+        s[s.size() - i - 1] = '0' + v % 10;
+        v /= 10;
+      }
   }
 
-  void appendD3(std::string& s, unsigned v)
+  void appendDn(std::string& s, unsigned short n, int v)
   {
-      char d[3];
-      d[2] = '0' + v % 10;
-      v /= 10;
-      d[1] = '0' + v % 10;
-      v /= 10;
-      d[0] = '0' + v % 10;
-      s.append(d, 3);
+      if (v < 0)
+      {
+          s += '-';
+          appendDn(s, n, static_cast<unsigned>(-v));
+      }
+      else
+          appendDn(s, n, static_cast<unsigned>(v));
   }
 
-  void appendD2(std::string& s, unsigned v)
+  unsigned getMonthFromName(std::string::const_iterator& b, std::string::const_iterator e)
   {
-      char d[2];
-      d[1] = '0' + v % 10;
-      v /= 10;
-      d[0] = '0' + v % 10;
-      s.append(d, 2);
-  }
+    char m[4];
+    unsigned d;
+    for (d = 0; d < 3 && b != e && std::isalpha(*b); ++d)
+      m[d] = *b++;
+    if (d != 3)
+      throw std::invalid_argument("invalid date format - monthname expected");
 
-  void appendD1(std::string& s, unsigned short v)
-  {
-      s += '0' + v % 10;
+    m[3] = '\0';
+    for (d = 0; d < 12; ++d)
+    {
+      if (strcasecmp(monthnames[d], m) == 0)
+        return d + 1;
+    }
+
+    throw std::invalid_argument("invalid date format - monthname expected");
   }
 
 }

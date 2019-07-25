@@ -31,21 +31,48 @@
 #include "cxxtools/xml/characters.h"
 #include "cxxtools/string.h"
 #include "cxxtools/utf8codec.h"
+#include "cxxtools/log.h"
 #include <stdexcept>
+
+log_define("cxxtools.xml.deserializer")
 
 namespace cxxtools {
 
 namespace xml {
 
-XmlDeserializer::XmlDeserializer(XmlReader& reader, bool readAttributes)
-  : _readAttributes(readAttributes)
+namespace {
+
+    std::ostream& operator<< (std::ostream& out, Node::Type type)
+    {
+        switch(type)
+        {
+            case Node::StartDocument: out << "StartDocument"; break;
+            case Node::DocType: out << "DocType"; break;
+            case Node::EndDocument: out << "EndDocument"; break;
+            case Node::StartElement: out << "StartElement"; break;
+            case Node::EndElement: out << "EndElement"; break;
+            case Node::Characters: out << "Characters"; break;
+            case Node::Comment: out << "Comment"; break;
+            case Node::ProcessingInstruction: out << "ProcessingInstruction"; break;
+            case Node::Unknown:
+            default: out << "Unknown"; break;
+        }
+
+        return out;
+    }
+}
+
+XmlDeserializer::XmlDeserializer(XmlReader& reader, bool readAttributes, const String& attributePrefix)
+  : _readAttributes(readAttributes),
+    _attributePrefix(attributePrefix)
 {
     parse(reader);
 }
 
 
-XmlDeserializer::XmlDeserializer(std::istream& is, bool readAttributes)
-  : _readAttributes(readAttributes)
+XmlDeserializer::XmlDeserializer(std::istream& is, bool readAttributes, const String& attributePrefix)
+  : _readAttributes(readAttributes),
+    _attributePrefix(attributePrefix)
 {
     parse(is);
 }
@@ -90,6 +117,9 @@ void XmlDeserializer::parse(XmlReader& reader)
 void XmlDeserializer::beginDocument(XmlReader& reader)
 {
     const Node& node = reader.get();
+
+    log_debug("beginDocument; node type=" << node.type());
+
     switch( node.type() )
     {
         case Node::StartElement:
@@ -99,6 +129,7 @@ void XmlDeserializer::beginDocument(XmlReader& reader)
             _nodeName = se.name();
             _nodeType = se.attribute(L"type");
             _nodeCategory = se.attribute(L"category");
+            log_finer("node name=" << _nodeName);
 
             current()->setName(_nodeName.narrow());
             current()->setTypeName(_nodeType.narrow());
@@ -119,6 +150,9 @@ void XmlDeserializer::beginDocument(XmlReader& reader)
 void XmlDeserializer::onRootElement(XmlReader& reader)
 {
     const Node& node = reader.get();
+
+    log_debug("onRootElement; node type=" << node.type());
+
     switch( node.type() )
     {
         case Node::Characters:
@@ -140,6 +174,7 @@ void XmlDeserializer::onRootElement(XmlReader& reader)
         {
             const StartElement& se =  static_cast<const StartElement&>(node);
             _nodeName = se.name();
+            log_finer("node name=" << _nodeName);
             _nodeType = se.attribute(L"type");
             _nodeCategory = se.attribute(L"category");
             if (_readAttributes)
@@ -164,6 +199,9 @@ void XmlDeserializer::onRootElement(XmlReader& reader)
 void XmlDeserializer::onStartElement(XmlReader& reader)
 {
     const Node& node = reader.get();
+
+    log_debug("onStartElement; node type=" << node.type());
+
     switch( node.type() )
     {
         case Node::Characters:
@@ -175,7 +213,10 @@ void XmlDeserializer::onStartElement(XmlReader& reader)
                 std::string nodeType = _nodeType.empty() ? nodeName : _nodeType.narrow();
                 beginMember(nodeName, nodeType, nodeCategory());
                 if (_readAttributes)
+                {
                     processAttributes(_attributes);
+                    _attributes.clear();
+                }
                 setValue( chars.content() );
                 leaveMember();
                 //_current->addValue( _nodeName.narrow(), chars.content() );
@@ -185,10 +226,14 @@ void XmlDeserializer::onStartElement(XmlReader& reader)
             else
             {
                 std::string nodeName = _nodeName.narrow();
+                log_finer("node name=" << _nodeName);
                 std::string nodeType = _nodeType.empty() ? nodeName : _nodeType.narrow();
                 beginMember(nodeName, nodeType, nodeCategory());
                 if (_readAttributes)
+                {
                     processAttributes(_attributes);
+                    _attributes.clear();
+                }
 
                 _processNode = &XmlDeserializer::onWhitespace;
             }
@@ -199,14 +244,19 @@ void XmlDeserializer::onStartElement(XmlReader& reader)
         {
             std::string nodeName = _nodeName.narrow();
             std::string nodeType = _nodeType.empty() ? nodeName : _nodeType.narrow();
+            log_finer("beginMember " << nodeName);
             beginMember(nodeName, nodeType, nodeCategory());
 
             const StartElement& se =  static_cast<const StartElement&>(node);
             _nodeName = se.name();
+            log_finer("node name=" << se.name());
             _nodeType = se.attribute(L"type");
             _nodeCategory = se.attribute(L"category");
             if (_readAttributes)
+            {
+                processAttributes(_attributes);
                 _attributes = se.attributes();
+            }
             break;
         }
         case Node::EndElement:
@@ -218,7 +268,10 @@ void XmlDeserializer::onStartElement(XmlReader& reader)
             std::string nodeType = _nodeType.empty() ? nodeName : _nodeType.narrow();
             beginMember(nodeName, nodeType, nodeCategory());
             if (_readAttributes)
+            {
                 processAttributes(_attributes);
+                _attributes.clear();
+            }
             leaveMember();
             _processNode = &XmlDeserializer::onEndElement;
             break;
@@ -232,12 +285,16 @@ void XmlDeserializer::onStartElement(XmlReader& reader)
 void XmlDeserializer::onWhitespace(XmlReader& reader)
 {
     const Node& node = reader.get();
+
+    log_debug("onWhitespaceElement; node type=" << node.type());
+
     switch( node.type() )
     {
         case Node::StartElement:
         {
             const StartElement& se =  static_cast<const StartElement&>(node);
             _nodeName = se.name();
+            log_finer("node name=" << _nodeName);
             _nodeType = se.attribute(L"type");
             _nodeCategory = se.attribute(L"category");
             if (_readAttributes)
@@ -265,6 +322,9 @@ void XmlDeserializer::onWhitespace(XmlReader& reader)
 void XmlDeserializer::onContent(XmlReader& reader)
 {
     const Node& node = reader.get();
+
+    log_debug("onContentElement; node type=" << node.type());
+
     switch( node.type() )
     {
         case Node::EndElement:
@@ -281,6 +341,9 @@ void XmlDeserializer::onContent(XmlReader& reader)
 void XmlDeserializer::onEndElement(XmlReader& reader)
 {
     const Node& node = reader.get();
+
+    log_debug("onEndElement; node type=" << node.type());
+
     switch( node.type() )
     {
         case Node::Characters:
@@ -290,9 +353,19 @@ void XmlDeserializer::onEndElement(XmlReader& reader)
         }
         case Node::StartElement:
         {
-            _nodeName = static_cast<const StartElement&>(node).name();
-            _nodeType = static_cast<const StartElement&>(node).attribute(L"type");
-            _nodeCategory = static_cast<const StartElement&>(node).attribute(L"category");
+            const StartElement& se =  static_cast<const StartElement&>(node);
+
+            _nodeName = se.name();
+            _nodeType = se.attribute(L"type");
+            _nodeCategory = se.attribute(L"category");
+            if (_readAttributes)
+            {
+                processAttributes(_attributes);
+                _attributes = se.attributes();
+            }
+
+            log_finer("node name=" << _nodeName);
+
             _processNode = &XmlDeserializer::onStartElement;
             break;
         }
@@ -327,10 +400,11 @@ SerializationInfo::Category XmlDeserializer::nodeCategory() const
 
 void XmlDeserializer::processAttributes(const Attributes& attributes)
 {
+    log_debug("processAttributes " << attributes.size() << " attributes");
     SerializationInfo& si = *current();
     for (Attributes::const_iterator it = attributes.begin(); it != attributes.end(); ++it)
     {
-        SerializationInfo& m = si.addMember(cxxtools::encode<Utf8Codec>(it->name()));
+        SerializationInfo& m = si.addMember(cxxtools::encode<Utf8Codec>(_attributePrefix + it->name()));
         m.setValue(it->value());
         m.setTypeName("attribute");
     }

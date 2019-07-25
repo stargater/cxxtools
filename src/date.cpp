@@ -34,8 +34,18 @@
 namespace cxxtools
 {
 
+static void throwInvalidDate(const std::string& str, std::string::const_iterator p, const std::string& fmt)
+{
+    throw InvalidDate("string <" + std::string(str.begin(), p) + "(*)" + std::string(p, str.end()) + "> does not match date format <" + fmt + '>');
+}
+
 InvalidDate::InvalidDate()
 : std::invalid_argument("Invalid date")
+{
+}
+
+InvalidDate::InvalidDate(const std::string& what)
+: std::invalid_argument(what)
 {
 }
 
@@ -53,7 +63,7 @@ void greg2jul(unsigned& jd, int y, int m, int d)
 
 void jul2greg(unsigned jd, int& y, int& m, int& d)
 {
-  register int l,n,i,j;
+  int l,n,i,j;
   l=jd+68569;
   n=(4*l)/146097;
   l=l-(146097*n+3)/4;
@@ -71,65 +81,98 @@ void jul2greg(unsigned jd, int& y, int& m, int& d)
 Date::Date(const std::string& str, const std::string& fmt)
 {
   unsigned year = 0;
-  unsigned month = 0;
-  unsigned day = 0;
+  unsigned month = 1;
+  unsigned day = 1;
 
   enum {
     state_0,
-    state_fmt
+    state_fmt,
+    state_two
   } state = state_0;
 
   std::string::const_iterator dit = str.begin();
-  std::string::const_iterator it;
-  for (it = fmt.begin(); it != fmt.end() && dit != str.end(); ++it)
+  try
   {
-    char ch = *it;
-    switch (state)
+    std::string::const_iterator it;
+    for (it = fmt.begin(); it != fmt.end() && dit != str.end(); ++it)
     {
-      case state_0:
-        if (ch == '%')
-          state = state_fmt;
-        else
-        {
-          if (*dit != ch)
-            throw std::runtime_error("string <" + str + "> does not match date format <" + fmt + '>');
-          ++dit;
-        }
-        break;
+      char ch = *it;
+      switch (state)
+      {
+        case state_0:
+          if (ch == '%')
+            state = state_fmt;
+          else
+          {
+            if (ch == '*')
+              skipNonDigit(dit, str.end());
+            else if (ch == '#')
+              skipWord(dit, str.end());
+            else if (*dit != ch && ch != '?')
+              throwInvalidDate(str, dit, fmt);
+            else
+              ++dit;
+          }
+          break;
 
-      case state_fmt:
-        switch (ch)
-        {
-          case 'Y':
-            year = getInt(dit, str.end(), 4);
-            break;
+        case state_fmt:
+          if (*it != '%')
+            state = state_0;
 
-          case 'y':
-            year = getInt(dit, str.end(), 4);
-            year += (year < 50 ? 2000 : 1900);
-            break;
+          switch (ch)
+          {
+            case 'Y':
+              year = getInt(dit, str.end(), 4);
+              break;
 
-          case 'm':
-            month = getUnsigned(dit, str.end(), 2);
-            break;
+            case 'y':
+              year = getInt(dit, str.end(), 2);
+              year += (year < 50 ? 2000 : 1900);
+              break;
 
-          case 'd':
-            day = getUnsigned(dit, str.end(), 2);
-            break;
+            case 'm':
+              month = getUnsigned(dit, str.end(), 2);
+              break;
 
-          default:
-            throw std::runtime_error("invalid date format <" + fmt + '>');
-        }
+            case 'O':
+              month = getMonthFromName(dit, str.end());
+              break;
 
-        state = state_0;
-        break;
+            case 'd':
+              day = getUnsigned(dit, str.end(), 2);
+              break;
+
+            case '2':
+              state = state_two;
+              break;
+
+            default:
+              throw InvalidDate("invalid date format <" + fmt + '>');
+          }
+
+          break;
+
+        case state_two:
+          state = state_0;
+          switch (ch)
+          {
+            case 'm': month = getUnsignedF(dit, str.end(), 2); break;
+            case 'd': day = getUnsignedF(dit, str.end(), 2); break;
+            default:
+              throw InvalidDate("invalid date format <" + fmt + '>');
+          }
+      }
     }
+
+    if (it != fmt.end() || dit != str.end())
+      throwInvalidDate(str, dit, fmt);
+
+    set(year, month, day);
   }
-
-  if (it != fmt.end() || dit != str.end())
-    throw std::runtime_error("string <" + str + "> does not match date format <" + fmt + '>');
-
-  set(year, month, day);
+  catch (const std::invalid_argument&)
+  {
+    throwInvalidDate(str, dit, fmt);
+  }
 }
 
 std::string Date::toString(const std::string& fmt) const
@@ -144,7 +187,8 @@ std::string Date::toString(const std::string& fmt) const
 
   enum {
     state_0,
-    state_fmt
+    state_fmt,
+    state_one
   } state = state_0;
 
   for (std::string::const_iterator it = fmt.begin(); it != fmt.end(); ++it)
@@ -159,20 +203,41 @@ std::string Date::toString(const std::string& fmt) const
         break;
 
       case state_fmt:
-        switch (*it)
-        {
-          case 'Y': appendD4(str, year); break;
-          case 'y': appendD2(str, year % 100); break;
-          case 'm': appendD2(str, month); break;
-          case 'd': appendD2(str, day); break;
-          case 'w': appendD1(str, dayOfWeek()); break;
-          case 'W': { int dow = dayOfWeek(); appendD1(str, dow == 0 ? 7 : dow); } break;
-          default:
-            str += '%';
-        }
-
         if (*it != '%')
           state = state_0;
+
+        switch (*it)
+        {
+          case 'Y': appendDn(str, 4, year); break;
+          case 'y': appendDn(str, 2, year % 100); break;
+          case 'm': appendDn(str, 2, month); break;
+          case 'O': str += monthnames[month-1]; break;
+          case 'd': appendDn(str, 2, day); break;
+          case 'w': appendDn(str, 1, dayOfWeek()); break;
+          case 'W': { int dow = dayOfWeek(); appendDn(str, 1, dow == 0 ? 7 : dow); } break;
+          case 'N': str += weekdaynames[dayOfWeek()]; break;
+          case '1': state = state_one; break;
+
+          default:
+            str += '%';
+            str += *it;
+        }
+
+        break;
+
+      case state_one:
+        state = state_0;
+        switch (*it)
+        {
+          case 'd': appendDn(str, day < 10 ? 1 : 2, day); break;
+          case 'm': appendDn(str, month < 10 ? 1 : 2, month); break;
+          default:  str += "%1";
+                    str += *it;
+                    if (*it == '%')
+                      state = state_fmt;
+                    break;
+        }
+
         break;
     }
   }
@@ -182,6 +247,23 @@ std::string Date::toString(const std::string& fmt) const
 
   return str;
 }
+
+bool Date::isValid(int y, int m, int d)
+{
+    static const unsigned char monthDays[12]=
+    {
+        31,28,31,30,31,30,31,31,30,31,30,31
+    };
+
+    if (m == 2 && leapYear(y) && d == 29)
+        return true;
+
+    if (m < 1 || m > 12 || d < 1 || d > monthDays[m-1])
+        return false;
+
+    return true;
+}
+
 
 void operator>>=(const SerializationInfo& si, Date& date)
 {

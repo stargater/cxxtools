@@ -30,6 +30,7 @@
 
 #include <string>
 #include <stdexcept>
+#include <cxxtools/timespan.h>
 
 namespace cxxtools
 {
@@ -40,6 +41,8 @@ class InvalidDate : public std::invalid_argument
 {
     public:
         InvalidDate();
+
+        explicit InvalidDate(const std::string& what);
 
         ~InvalidDate() throw()
         {}
@@ -162,7 +165,13 @@ class Date
               %Y   4 digit year
               %y   2 digit year
               %m   month (1-12)
+              %2m  month (01-12)
+              %O   english monthname (Jan-Dec)
               %d   day (1-31)
+              %2d  day (01-31)
+              ?    arbitrary character
+              *    skip non digit characters
+              #    skip word
          */
         explicit Date(const std::string& d, const std::string& fmt = "%Y-%m-%d");
 
@@ -234,12 +243,6 @@ class Date
         */
         bool leapYear() const;
 
-        // TODO: move to cxxtools:.System
-        //static Date localDate();
-
-        // TODO: move to cxxtools:.System
-        //static Date universalDate();
-
         /** @brief Assignment operator
         */
         Date& operator=(const Date& date)
@@ -250,7 +253,7 @@ class Date
         Date& operator+=(int days)
         { _julian += days; return *this; }
 
-        /** @brief Substract days from the date
+        /** @brief Subtract days from the date
         */
         Date& operator-=(int days)
         { _julian -= days; return *this; }
@@ -299,18 +302,21 @@ class Date
 
         friend inline Date operator+(int days, const Date& d);
 
-        friend inline int operator-(const Date& a, const Date& b);
+        friend inline Days operator-(const Date& a, const Date& b);
 
         /** \brief format Date into a string using a format string
 
             Valid format codes are:
 
-              %d day (1-31)
-              %m month (1-12)
-              %Y 4 digit year
-              %y 2 digit year
-              %w day of week (0-6 sunday=6)
-              %W day of week (1-7 sunday=7)
+              %d   day (01-31)
+              %1d  day (1-31)
+              %m   month (01-12)
+              %1m  month (1-12)
+              %O   english monthname (Jan-Dec)
+              %Y   4 digit year
+              %y   2 digit year
+              %w   day of week (0-6 sunday=6)
+              %W   day of week (1-7 sunday=7)
          */
         std::string toString(const std::string& fmt = "%Y-%m-%d") const;
 
@@ -435,17 +441,6 @@ inline bool Date::leapYear() const
 }
 
 
-inline bool Date::isValid(int y, int m, int d)
-{
-    if(m<1 || m>12 || d<1 || d>31)
-    {
-        return false;
-    }
-
-    return true;
-}
-
-
 inline Date operator+(const Date& d, int days)
 { return Date(d._julian + days); }
 
@@ -454,8 +449,8 @@ inline Date operator+(int days, const Date& d)
 { return Date(days + d._julian); }
 
 
-inline int operator-(const Date& a, const Date& b)
-{ return a._julian - b._julian; }
+inline Days operator-(const Date& a, const Date& b)
+{ return Days(a._julian - b._julian); }
 
 }
 

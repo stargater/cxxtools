@@ -29,7 +29,6 @@
 #include "cxxtools/unit/testsuite.h"
 #include "cxxtools/unit/registertest.h"
 #include "cxxtools/serializationinfo.h"
-#include "cxxtools/xml/xmlserializer.h"
 #include "cxxtools/propertiesdeserializer.h"
 #include "cxxtools/propertiesparser.h"
 #include "cxxtools/properties.h"
@@ -87,6 +86,8 @@ class PropertiesTest : public cxxtools::unit::TestSuite
             registerMethod("testStrangeKeys", *this, &PropertiesTest::testStrangeKeys);
             registerMethod("testMultilineValues", *this, &PropertiesTest::testMultilineValues);
             registerMethod("testEmptyValue", *this, &PropertiesTest::testEmptyValue);
+            registerMethod("testTab", *this, &PropertiesTest::testTab);
+            registerMethod("testTrim", *this, &PropertiesTest::testTrim);
         }
 
         void testProperties()
@@ -192,9 +193,9 @@ class PropertiesTest : public cxxtools::unit::TestSuite
         void testVector()
         {
             std::istringstream data(
-                "myvector=4\n"
-                "myvector=Hi\n"
-                "myvector=foo\n"
+                "myvector.0=4\n"
+                "myvector.1=Hi\n"
+                "myvector.2=foo\n"
             );
 
             cxxtools::PropertiesDeserializer deserializer(data);
@@ -235,11 +236,33 @@ class PropertiesTest : public cxxtools::unit::TestSuite
             CXXTOOLS_UNIT_ASSERT_EQUALS(v, 5);
 
             v = 0;
-            CXXTOOLS_UNIT_ASSERT_NOTHROW(si.getMember("a").getMember(0) >>= v);
+            CXXTOOLS_UNIT_ASSERT_NOTHROW(
+                si.getMember("a").getMember("b").getMember("c").getMember("d") >>= v);
             CXXTOOLS_UNIT_ASSERT_EQUALS(v, 5);
 
             v = 0;
-            CXXTOOLS_UNIT_ASSERT_NOTHROW(si.getMember("a").getMember(1) >>= v);
+            CXXTOOLS_UNIT_ASSERT_NOTHROW(
+                si.getMember("a.b").getMember("c").getMember("d") >>= v);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(v, 5);
+
+            v = 0;
+            CXXTOOLS_UNIT_ASSERT_NOTHROW(
+                si.getMember("a").getMember("b.c").getMember("d") >>= v);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(v, 5);
+
+            v = 0;
+            CXXTOOLS_UNIT_ASSERT_NOTHROW(
+                si.getMember("a").getMember("b.c.d") >>= v);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(v, 5);
+
+            v = 0;
+            CXXTOOLS_UNIT_ASSERT_NOTHROW(
+                si.getMember("a.b").getMember("c.d") >>= v);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(v, 5);
+
+            v = 0;
+            CXXTOOLS_UNIT_ASSERT_NOTHROW(
+                si.getMember("a.e.f.g") >>= v);
             CXXTOOLS_UNIT_ASSERT_EQUALS(v, 7);
 
         }
@@ -319,6 +342,70 @@ class PropertiesTest : public cxxtools::unit::TestSuite
             CXXTOOLS_UNIT_ASSERT_EQUALS(v, "");
 
         }
+
+        void testTab()
+        {
+            std::istringstream data(
+                "a \\t\n"
+                "b : \\t\n");
+
+            cxxtools::PropertiesDeserializer deserializer(data);
+
+            cxxtools::Char v;
+            CXXTOOLS_UNIT_ASSERT_NOTHROW(deserializer.deserialize(v, "a"));
+            CXXTOOLS_UNIT_ASSERT_EQUALS(v, L'\t');
+
+            v = L' ';
+            CXXTOOLS_UNIT_ASSERT_NOTHROW(deserializer.deserialize(v, "b"));
+            CXXTOOLS_UNIT_ASSERT_EQUALS(v, L'\t');
+
+        }
+
+        void testTrim()
+        {
+            std::istringstream data(
+                "a = hi\t\n"
+                "b = \thi\n"
+                "c = hi\\t\n"
+                "d = \t\\thi\\  \n"
+                "e blah \n"
+                "f blah\x9\n"
+                "g blah\\t");
+
+            cxxtools::PropertiesDeserializer deserializer;
+            deserializer.trim(true);
+            deserializer.read(data);
+
+            cxxtools::String v;
+            CXXTOOLS_UNIT_ASSERT_NOTHROW(deserializer.deserialize(v, "a"));
+            CXXTOOLS_UNIT_ASSERT_EQUALS(v, cxxtools::String(L"hi"));
+
+            v.clear();
+            CXXTOOLS_UNIT_ASSERT_NOTHROW(deserializer.deserialize(v, "b"));
+            CXXTOOLS_UNIT_ASSERT_EQUALS(v, cxxtools::String(L"hi"));
+
+            v.clear();
+            CXXTOOLS_UNIT_ASSERT_NOTHROW(deserializer.deserialize(v, "c"));
+            CXXTOOLS_UNIT_ASSERT_EQUALS(v, cxxtools::String(L"hi\t"));
+
+            v.clear();
+            CXXTOOLS_UNIT_ASSERT_NOTHROW(deserializer.deserialize(v, "d"));
+            CXXTOOLS_UNIT_ASSERT_EQUALS(v, cxxtools::String(L"\thi "));
+
+            v.clear();
+            CXXTOOLS_UNIT_ASSERT_NOTHROW(deserializer.deserialize(v, "e"));
+            CXXTOOLS_UNIT_ASSERT_EQUALS(v, cxxtools::String(L"blah"));
+
+            v.clear();
+            CXXTOOLS_UNIT_ASSERT_NOTHROW(deserializer.deserialize(v, "f"));
+            CXXTOOLS_UNIT_ASSERT_EQUALS(v, cxxtools::String(L"blah"));
+
+            v.clear();
+            CXXTOOLS_UNIT_ASSERT_NOTHROW(deserializer.deserialize(v, "g"));
+            CXXTOOLS_UNIT_ASSERT_EQUALS(v, cxxtools::String(L"blah\t"));
+
+        }
+
 };
 
 cxxtools::unit::RegisterTest<PropertiesTest> register_PropertiesTest;

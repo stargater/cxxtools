@@ -30,16 +30,25 @@
 #define cxxtools_SerializationInfo_h
 
 #include <cxxtools/string.h>
-#include <cxxtools/convert.h>
-#include <cxxtools/serializationerror.h>
 #include <vector>
 #include <set>
 #include <map>
 #include <list>
 #include <deque>
 #include <limits>
-#include <typeinfo>
+#include <iosfwd>
 #include <cxxtools/config.h>
+
+#if __cplusplus >= 201103L
+
+#include <forward_list>
+#include <unordered_set>
+#include <unordered_map>
+#include <tuple>
+#include <array>
+#include <type_traits>
+
+#endif
 
 namespace cxxtools
 {
@@ -100,7 +109,8 @@ namespace cxxtools
 
 class SerializationInfo
 {
-    typedef std::vector<SerializationInfo> Nodes;
+        typedef std::deque<SerializationInfo> Nodes;
+        friend void operator <<=(SerializationInfo& si, const SerializationInfo& ssi);
 
     public:
         enum Category {
@@ -133,11 +143,17 @@ class SerializationInfo
 
         SerializationInfo(const SerializationInfo& si);
 
-        ~SerializationInfo()
-        { _releaseValue(); }
+        ~SerializationInfo();
 
-        void reserve(size_t n)
-        { _nodes.reserve(n); }
+        SerializationInfo& operator =(const SerializationInfo& si);
+
+#if __cplusplus >= 201103L
+
+        SerializationInfo(SerializationInfo&& si) noexcept;
+
+        SerializationInfo& operator=(SerializationInfo&& si);
+
+#endif
 
         Category category() const
         {
@@ -157,6 +173,8 @@ class SerializationInfo
         void setTypeName(const std::string& type)
         {
             _type = type;
+            if (_category == Void)
+                _category = Object;
         }
 
         const std::string& name() const
@@ -193,8 +211,8 @@ class SerializationInfo
 #endif
 
         void setValue(float value)               { _setFloat(value); }
-        void setValue(double value)              { _setFloat(value); }
-        void setValue(long double value)         { _setFloat(value); }
+        void setValue(double value)              { _setDouble(value); }
+        void setValue(long double value)         { _setLongDouble(value); }
         void setNull();
 
         /** @brief Deserialization of flat data-types
@@ -230,11 +248,11 @@ class SerializationInfo
             { value = static_cast<unsigned long long>(_getUInt("unsigned long long", std::numeric_limits<unsigned long long>::max())); }
 #endif
         void getValue(float& value) const
-            { value = static_cast<float>(_getFloat("float", static_cast<long double>(std::numeric_limits<float>::max())*1.0000000000001)); }
+            { value = _getFloat(); }
         void getValue(double& value) const
-            { value = static_cast<double>(_getFloat("double", static_cast<long double>(std::numeric_limits<double>::max())*1.0000000000001)); }
+            { value = _getDouble(); }
         void getValue(long double& value) const
-            { value = static_cast<long double>(_getFloat("long double", std::numeric_limits<long double>::max())); }
+            { value = _getLongDouble(); }
 
         /** @brief Serialization of flat member data-types
         */
@@ -249,6 +267,16 @@ class SerializationInfo
         /** @brief Serialization of member data
         */
         SerializationInfo& addMember(const std::string& name = std::string());
+
+        /** @brief Returns a member; adds when not yet found
+         */
+        SerializationInfo& getAddMember(const std::string& name)
+        {
+            SerializationInfo* si = findMember(name);
+            if (si == 0)
+                return addMember(name);
+            return *si;
+        }
 
         /** @brief Deserialization of member data
 
@@ -293,45 +321,45 @@ class SerializationInfo
 
         size_t memberCount() const
         {
-            return _nodes.size();
+            return nodes().size();
         }
 
         Iterator begin()
         {
-            return _nodes.begin();
+            return nodes().begin();
         }
 
         Iterator end()
         {
-            return _nodes.end();
+            return nodes().end();
         }
 
         ConstIterator begin() const
         {
-            return _nodes.begin();
+            return nodes().begin();
         }
 
         ConstIterator end() const
         {
-            return _nodes.end();
+            return nodes().end();
         }
-
-        SerializationInfo& operator =(const SerializationInfo& si);
 
         void clear();
 
         void swap(SerializationInfo& si);
 
-        bool isNull() const     { return _t == t_none && _category == Void; }
-        bool isString() const   { return _t == t_string; }
-        bool isString8() const  { return _t == t_string8; }
-        bool isChar() const     { return _t == t_char; }
-        bool isBool() const     { return _t == t_bool; }
-        bool isInt() const      { return _t == t_int; }
-        bool isUInt() const     { return _t == t_uint; }
-        bool isFloat() const    { return _t == t_float; }
+        bool isNull() const       { return _t == t_none && (_category == Void || _category == Value); }
+        bool isString() const     { return _t == t_string; }
+        bool isString8() const    { return _t == t_string8; }
+        bool isChar() const       { return _t == t_char; }
+        bool isBool() const       { return _t == t_bool; }
+        bool isInt() const        { return _t == t_int; }
+        bool isUInt() const       { return _t == t_uint; }
+        bool isFloat() const      { return _t == t_float; }
+        bool isDouble() const     { return _t == t_double; }
+        bool isLongDouble() const { return _t == t_ldouble; }
 
-        void dump(std::ostream& out, const std::string& praefix = std::string()) const;
+        void dump(std::ostream& out, const std::string& prefix = std::string()) const;
 
     private:
         Category _category;
@@ -346,14 +374,22 @@ class SerializationInfo
         void _setBool(bool value);
         void _setInt(int_type value);
         void _setUInt(unsigned_type value);
-        void _setFloat(long double value);
+        void _setFloat(float value);
+        void _setDouble(double value);
+        void _setLongDouble(long double value);
 
         bool _getBool() const;
         wchar_t _getWChar() const;
         char _getChar() const;
         int_type _getInt(const char* type, int_type min, int_type max) const;
         unsigned_type _getUInt(const char* type, unsigned_type max) const;
-        long double _getFloat(const char* type, long double max) const;
+        float _getFloat() const;
+        double _getDouble() const;
+        long double _getLongDouble() const;
+        Nodes& nodes();
+        const Nodes& nodes() const;
+        // assignment without name
+        void assignData(const SerializationInfo& si);
 
         union U
         {
@@ -362,16 +398,18 @@ class SerializationInfo
             bool _b;
             int_type _i;
             unsigned_type _u;
-            long double _f;
+            float _f;
+            double _d;
+            long double _ld;
         } _u;
 
-        String* _StringPtr()                    { return reinterpret_cast<String*>(_u._s); }
+        String* _StringPtr()                    { return reinterpret_cast<String*>(&_u); }
         String& _String()                       { return *_StringPtr(); }
-        const String* _StringPtr() const        { return reinterpret_cast<const String*>(_u._s); }
+        const String* _StringPtr() const        { return reinterpret_cast<const String*>(&_u); }
         const String& _String() const           { return *_StringPtr(); }
-        std::string* _String8Ptr()              { return reinterpret_cast<std::string*>(_u._s); }
+        std::string* _String8Ptr()              { return reinterpret_cast<std::string*>(&_u); }
         std::string& _String8()                 { return *_String8Ptr(); }
-        const std::string* _String8Ptr() const  { return reinterpret_cast<const std::string*>(_u._s); }
+        const std::string* _String8Ptr() const  { return reinterpret_cast<const std::string*>(&_u); }
         const std::string& _String8() const     { return *_String8Ptr(); }
 
         enum T
@@ -383,61 +421,20 @@ class SerializationInfo
           t_bool,
           t_int,
           t_uint,
-          t_float
+          t_float,
+          t_double,
+          t_ldouble
         } _t;
 
-        Nodes _nodes;             // objects/arrays
+        Nodes* _nodes;             // objects/arrays
 };
 
 
 inline SerializationInfo::SerializationInfo()
-: _category(Void)
-, _t(t_none)
+: _category(Void),
+  _t(t_none),
+  _nodes(0)
 { }
-
-
-inline SerializationInfo::SerializationInfo(const SerializationInfo& si)
-: _category(si._category)
-, _name(si._name)
-, _type(si._type)
-, _u(si._u)
-, _t(si._t)
-, _nodes(si._nodes)
-{
-    switch (_t)
-    {
-        case t_string:  new (_StringPtr()) String(si._String());
-                        break;
-
-        case t_string8: new (_String8Ptr()) std::string(si._String8());
-                        break;
-
-        default:
-            ;
-    }
-}
-
-
-inline SerializationInfo& SerializationInfo::operator=(const SerializationInfo& si)
-{
-    _category = si._category;
-    _name = si._name;
-    _type = si._type;
-    _nodes = si._nodes;
-
-    if (si._t == t_string)
-        _setString( si._String() );
-    else if (si._t == t_string8)
-        _setString8( si._String8() );
-    else
-    {
-        _releaseValue();
-        _u = si._u;
-        _t = si._t;
-    }
-
-    return *this;
-}
 
 
 inline void operator >>=(const SerializationInfo& si, SerializationInfo& ssi)
@@ -446,10 +443,7 @@ inline void operator >>=(const SerializationInfo& si, SerializationInfo& ssi)
 }
 
 
-inline void operator <<=(SerializationInfo& si, const SerializationInfo& ssi)
-{
-    si = ssi;
-}
+void operator <<=(SerializationInfo& si, const SerializationInfo& ssi);
 
 
 inline void operator >>=(const SerializationInfo& si, bool& n)
@@ -625,7 +619,7 @@ inline void operator >>=(const SerializationInfo& si, float& n)
 inline void operator <<=(SerializationInfo& si, float n)
 {
     si.setValue(n);
-    si.setTypeName("double");
+    si.setTypeName("float");
 }
 
 
@@ -636,6 +630,19 @@ inline void operator >>=(const SerializationInfo& si, double& n)
 
 
 inline void operator <<=(SerializationInfo& si, double n)
+{
+    si.setValue(n);
+    si.setTypeName("double");
+}
+
+
+inline void operator >>=(const SerializationInfo& si, long double& n)
+{
+    si.getValue(n);
+}
+
+
+inline void operator <<=(SerializationInfo& si, long double n)
 {
     si.setValue(n);
     si.setTypeName("double");
@@ -706,7 +713,6 @@ inline void operator <<=(SerializationInfo& si, const std::vector<T, A>& vec)
 {
     typename std::vector<T, A>::const_iterator it;
 
-    si.reserve(vec.size());
     for(it = vec.begin(); it != vec.end(); ++it)
     {
         SerializationInfo& newSi = si.addMember();
@@ -718,28 +724,17 @@ inline void operator <<=(SerializationInfo& si, const std::vector<T, A>& vec)
 }
 
 
-inline void operator >>=(const SerializationInfo& si, std::vector<int>& vec)
+inline void operator>>=(const SerializationInfo& si, std::vector<bool>::reference bit)
 {
-    vec.clear();
-    for(SerializationInfo::ConstIterator it = si.begin(); it != si.end(); ++it)
-    {
-        vec.resize( vec.size() + 1 );
-        *it >>= vec.back();
-    }
+    bool v;
+    si >>= v;
+    bit = v;
 }
 
-inline void operator <<=(SerializationInfo& si, const std::vector<int>& vec)
+
+inline void operator<<=(SerializationInfo& si, std::vector<bool>::reference bit)
 {
-    std::vector<int>::const_iterator it;
-
-    for(it = vec.begin(); it != vec.end(); ++it)
-    {
-        SerializationInfo& newSi = si.addMember();
-        newSi <<= *it;
-    }
-
-    si.setTypeName("array");
-    si.setCategory(SerializationInfo::Array);
+    si <<= static_cast<bool>(bit);
 }
 
 
@@ -933,11 +928,359 @@ inline void operator <<=(SerializationInfo& si, const std::multimap<T, C, P, A>&
     si.setCategory(SerializationInfo::Array);
 }
 
+template <typename T, size_t N>
+void operator >>=(const SerializationInfo& si, T (&v)[N])
+{
+    for (size_t n = 0; n < N; ++n)
+        si.getMember(n) >>= v[n];
+}
+
+template <typename T, size_t N>
+void operator <<=(SerializationInfo& si, const T (&v)[N])
+{
+    for (size_t n = 0; n < N; ++n)
+        si.addMember() <<= v[n];
+
+    si.setTypeName("array");
+    si.setCategory(SerializationInfo::Array);
+}
+
+#if __cplusplus >= 201103L
+
+template <typename T, typename A>
+inline void operator >>=(const SerializationInfo& si, std::forward_list<T, A>& list)
+{
+    list.clear();
+    for (size_t n = si.memberCount(); n > 0; --n)
+    {
+        list.push_front(T());
+        si.getMember(n-1) >>= list.front();
+    }
+}
+
+
+template <typename T, typename A>
+inline void operator <<=(SerializationInfo& si, const std::forward_list<T, A>& list)
+{
+    typename std::forward_list<T, A>::const_iterator it;
+
+    for(it = list.begin(); it != list.end(); ++it)
+    {
+        SerializationInfo& newSi = si.addMember();
+        newSi <<= *it;
+    }
+
+    si.setTypeName("list");
+    si.setCategory(SerializationInfo::Array);
+}
+
+
+template <typename T, typename H, typename P, typename A>
+inline void operator >>=(const SerializationInfo& si, std::unordered_set<T, H, P, A>& unordered_set)
+{
+    unordered_set.clear();
+    for(SerializationInfo::ConstIterator it = si.begin(); it != si.end(); ++it)
+    {
+        T t;
+        *it >>= t;
+        unordered_set.insert(t);
+    }
+}
+
+
+template <typename T, typename H, typename P, typename A>
+inline void operator <<=(SerializationInfo& si, const std::unordered_set<T, H, P, A>& unordered_set)
+{
+    typename std::unordered_set<T, H, P, A>::const_iterator it;
+
+    for(it = unordered_set.begin(); it != unordered_set.end(); ++it)
+    {
+        SerializationInfo& newSi = si.addMember();
+        newSi <<= *it;
+    }
+
+    si.setTypeName("set");
+    si.setCategory(SerializationInfo::Array);
+}
+
+
+template <typename T, typename H, typename P, typename A>
+inline void operator >>=(const SerializationInfo& si, std::unordered_multiset<T, H, P, A>& unordered_multiset)
+{
+    unordered_multiset.clear();
+    for(SerializationInfo::ConstIterator it = si.begin(); it != si.end(); ++it)
+    {
+        T t;
+        *it >>= t;
+        unordered_multiset.insert(t);
+    }
+}
+
+
+template <typename T, typename H, typename P, typename A>
+inline void operator <<=(SerializationInfo& si, const std::unordered_multiset<T, H, P, A>& unordered_multiset)
+{
+    typename std::unordered_multiset<T, H, P, A>::const_iterator it;
+
+    for(it = unordered_multiset.begin(); it != unordered_multiset.end(); ++it)
+    {
+        SerializationInfo& newSi = si.addMember();
+        newSi <<= *it;
+    }
+
+    si.setTypeName("set");
+    si.setCategory(SerializationInfo::Array);
+}
+
+
+template <typename K, typename V, typename H, typename P, typename A>
+inline void operator >>=(const SerializationInfo& si, std::unordered_map<K, V, H, P, A>& unordered_map)
+{
+    unordered_map.clear();
+    for(SerializationInfo::ConstIterator it = si.begin(); it != si.end(); ++it)
+    {
+        typename std::pair<K, V> v;
+        *it >>= v;
+        typename std::unordered_map<K, V, H, P, A>::value_type vv(v.first, v.second);
+        unordered_map.insert(vv);
+    }
+}
+
+
+template <typename K, typename V, typename H, typename P, typename A>
+inline void operator <<=(SerializationInfo& si, const std::unordered_map<K, V, H, P, A>& unordered_map)
+{
+    typename std::unordered_map<K, V, H, P, A>::const_iterator it;
+
+    for(it = unordered_map.begin(); it != unordered_map.end(); ++it)
+    {
+        SerializationInfo& newSi = si.addMember();
+        newSi <<= *it;
+    }
+
+    si.setTypeName("map");
+    si.setCategory(SerializationInfo::Array);
+}
+
+
+template <typename K, typename V, typename H, typename P, typename A>
+inline void operator >>=(const SerializationInfo& si, std::unordered_multimap<K, V, H, P, A>& unordered_multimap)
+{
+    unordered_multimap.clear();
+    for(SerializationInfo::ConstIterator it = si.begin(); it != si.end(); ++it)
+    {
+        typename std::pair<K, V> v;
+        *it >>= v;
+        typename std::unordered_multimap<K, V, H, P, A>::value_type vv(v.first, v.second);
+        unordered_multimap.insert(vv);
+    }
+}
+
+
+template <typename K, typename V, typename H, typename P, typename A>
+inline void operator <<=(SerializationInfo& si, const std::unordered_multimap<K, V, H, P, A>& unordered_multimap)
+{
+    typename std::unordered_multimap<K, V, H, P, A>::const_iterator it;
+
+    for(it = unordered_multimap.begin(); it != unordered_multimap.end(); ++it)
+    {
+        SerializationInfo& newSi = si.addMember();
+        newSi <<= *it;
+    }
+
+    si.setTypeName("map");
+    si.setCategory(SerializationInfo::Array);
+}
+
+namespace helper
+{
+    template <int index, typename ... Types>
+    struct TupleSerializer
+    {
+        void serialize(SerializationInfo& si, const std::tuple<Types...>& tuple) const
+        {
+            TupleSerializer<index - 1, Types...>{}.serialize(si, tuple);
+            si.addMember() <<= std::get<index>(tuple);
+        }
+
+        void deserialize(const SerializationInfo& si, std::tuple<Types...>& tuple) const
+        {
+            TupleSerializer<index - 1, Types...>{}.deserialize(si, tuple);
+            si.getMember(index) >>= std::get<index>(tuple);
+        }
+    };
+
+    template <typename ... Types>
+    struct TupleSerializer<0, Types ...>
+    {
+        void serialize(SerializationInfo& si, const std::tuple<Types...>& tuple) const
+        {
+            si.addMember() <<= std::get<0>(tuple);
+        }
+
+        void deserialize(const SerializationInfo& si, std::tuple<Types...>& tuple) const
+        {
+            si.getMember(0) >>= std::get<0>(tuple);
+        }
+    };
+}
+
+template <class... Types>
+void operator >>=(const SerializationInfo& si, std::tuple<Types...>& tuple)
+{
+    const auto size = std::tuple_size<std::tuple<Types...>>::value;
+    helper::TupleSerializer<size - 1, Types...>{}.deserialize(si, tuple);
+}
+
+template <typename ... Types>
+void operator <<=(SerializationInfo& si, const std::tuple<Types...>& tuple)
+{
+    const auto size = std::tuple_size<std::tuple<Types...>>::value;
+    helper::TupleSerializer<size - 1, Types...>{}.serialize(si, tuple);
+
+    si.setTypeName("tuple");
+    si.setCategory(SerializationInfo::Array);
+}
+
+template <typename T, size_t N>
+void operator >>=(const SerializationInfo& si, std::array<T, N>& array)
+{
+    for (size_t n = 0; n < N; ++n)
+        si.getMember(n) >>= array[n];
+}
+
+template <typename T, size_t N>
+void operator <<=(SerializationInfo& si, const std::array<T, N>& array)
+{
+    for (size_t n = 0; n < N; ++n)
+        si.addMember() <<= array[n];
+
+    si.setTypeName("array");
+    si.setCategory(SerializationInfo::Array);
+}
+
+/// @internal
+template <typename ENUM>
+class EnumClassSerializer
+{
+    const ENUM& _value;
+
+public:
+    explicit EnumClassSerializer(const ENUM& e)
+        : _value(e)
+        { }
+
+    const ENUM& value() const   { return _value; }
+};
+
+/// @internal
+template <typename ENUM>
+void operator <<=(SerializationInfo& si, EnumClassSerializer<ENUM> e)
+{
+    si <<= static_cast<typename std::underlying_type<ENUM>::type>(e.value());
+}
+
+/// @internal
+template <typename ENUM>
+class EnumClassDeserializer
+{
+    ENUM& _value;
+
+public:
+    explicit EnumClassDeserializer(ENUM& e)
+        : _value(e)
+        { }
+
+    ENUM& value() const   { return _value; }
+};
+
+/// @internal
+template <typename ENUM>
+void operator <<=(SerializationInfo& si, EnumClassDeserializer<ENUM> e)
+{
+    si <<= static_cast<typename std::underlying_type<ENUM>::type>(e.value());
+}
+
+/// @internal
+template <typename ENUM>
+void operator >>=(const SerializationInfo& si, EnumClassDeserializer<ENUM> e)
+{
+    si >>= reinterpret_cast<typename std::underlying_type<ENUM>::type&>(e.value());
+}
+
+/** Helper for serializing strongly typed enums.
+ 
+    To serialize a enum this function returns a helper class, which can
+    serialize the underlying type using the serialization operator.
+
+    @code
+        enum class Foo : char
+        {
+            FOO, BAR, BAZ
+        };
+
+        Foo foo(Foo::FOO);
+
+        cxxtools::SerializationInfo si;
+        si <<= cxxtools::EnumClass(foo);
+    @endcode
+
+ */
+template <typename ENUM>
+EnumClassSerializer<ENUM> EnumClass(const ENUM& e)
+{ return EnumClassSerializer<ENUM>(e); }
+
+/** Helper for deserializing strongly typed enums.
+ 
+    To deserialize a enum this function returns a helper class, which can
+    serialize and deserialize the underlying type using the proper operators.
+
+    @code
+        enum class Foo : char
+        {
+            FOO, BAR, BAZ
+        };
+
+        Foo foo(Foo::FOO);
+
+        cxxtools::SerializationInfo si;
+        si <<= cxxtools::EnumClass(foo);
+    @endcode
+
+ */
+template <typename ENUM>
+EnumClassDeserializer<ENUM> EnumClass(ENUM& e)
+{ return EnumClassDeserializer<ENUM>(e); }
+
+#endif // __cplusplus >= 201103L
 
 inline std::ostream& operator<< (std::ostream& out, const SerializationInfo& si)
 {
     si.dump(out);
     return out;
+}
+
+/** Converts one object to another using serialization operators.
+
+    If a object is serializable (i.e. it has a operator<<=(SerializationInfo&, T)),
+    and another is deserializable (i.e. it has a operator>>=(const SerializationInfo&, ...))
+    this function can be used to convert one to the other.
+
+    @code
+        std::set<int> foo = getSetFromSomewhere();
+        std::vector<long> bar = cxxtools::serialization_cast<std::vector<long> >(foo);
+        // or with C++11:
+        auto bar = cxxtools::serialization_cast<std::vector<long> >(foo);
+    @endcode
+ */
+template <typename R, typename T>
+R serialization_cast(const T& t)
+{
+    SerializationInfo si;
+    si <<= t;
+    R r;
+    si >>= r;
+    return r;
 }
 
 } // namespace cxxtools

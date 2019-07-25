@@ -41,7 +41,7 @@ namespace cxxtools
        JsonOObject is a little wrapper which makes it easy to output serializable
        objects into a ostream. For this the JsonOObject expects a reference to the
        wrapped object and has a output operator for a std::ostream, or actually
-       a std::basic_ostream, which prints the object in json format.
+       a std::ostream, which prints the object in json format.
 
        Example:
        \code
@@ -57,13 +57,15 @@ namespace cxxtools
     {
         const ObjectType& _constObject;
         bool _beautify;
+        bool _plainkey;
 
       public:
         /// Constructor. Needs the wrapped object. Optionally a flag can be
         /// passed whether the json should be nicely formatted.
         explicit JsonOObject(const ObjectType& object, bool beautify = false)
           : _constObject(object),
-            _beautify(beautify)
+            _beautify(beautify),
+            _plainkey(false)
         { }
 
         /// Sets the formatting for json. If the passed flag is true, enables
@@ -75,18 +77,33 @@ namespace cxxtools
         bool beautify() const
         { return _beautify; }
 
+        JsonOObject& plainkey(bool sw)
+        { _plainkey = sw; return *this; }
+
+        bool plainkey() const
+        { return _plainkey; }
+
         const ObjectType& object() const
         { return _constObject; }
     };
 
     /// The output operator for JsonOObject. It does the actual work.
-    template <typename CharType, typename ObjectType>
-    std::basic_ostream<CharType>& operator<< (std::basic_ostream<CharType>& out, const JsonOObject<ObjectType>& object)
+    template <typename ObjectType>
+    std::ostream& operator<< (std::ostream& out, const JsonOObject<ObjectType>& object)
     {
-      JsonSerializer serializer(out);
-      serializer.beautify(object.beautify());
-      serializer.serialize(object.object())
-                .finish();
+      try
+      {
+        JsonSerializer serializer(out);
+        serializer.beautify(object.beautify());
+        serializer.plainkey(object.plainkey());
+        serializer.serialize(object.object())
+                  .finish();
+      }
+      catch (const std::exception&)
+      {
+        out.setstate(std::ios::failbit);
+        throw;
+      }
       return out;
     }
 
@@ -140,8 +157,16 @@ namespace cxxtools
     template <typename CharType, typename ObjectType>
     std::basic_istream<CharType>& operator>> (std::basic_istream<CharType>& in, JsonIOObject<ObjectType> object)
     {
-      JsonDeserializer deserializer(in);
-      deserializer.deserialize(object.object());
+      try
+      {
+        JsonDeserializer deserializer(in);
+        deserializer.deserialize(object.object());
+      }
+      catch (const std::exception&)
+      {
+        in.setstate(std::ios::failbit);
+        throw;
+      }
       return in;
     }
 

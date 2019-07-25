@@ -40,6 +40,8 @@
 namespace cxxtools
 {
 
+class SerializationInfo;
+
 /**
  QueryParams represents parameters from a HTML-Form.
 
@@ -53,6 +55,8 @@ namespace cxxtools
  */
 class QueryParams
 {
+    friend void operator<<= (cxxtools::SerializationInfo& si, const QueryParams& p);
+
   public:
     struct value_type
     {
@@ -277,6 +281,14 @@ class QueryParams
       return *this;
     }
 
+    /// returns all names of parameters
+    template <typename output_iterator>
+    void getNames(output_iterator o) const
+    {
+      for (values_type::const_iterator i = _values.begin(); i != _values.end(); ++i)
+        *o++ = (*i).name;
+    }
+
     /// removes all data
     void clear()
     { _values.clear(); }
@@ -308,6 +320,12 @@ class QueryParams
 /// output QueryParams in url-syntax
 inline std::ostream& operator<< (std::ostream& out, const QueryParams& p)
 { return out << p.getUrl(); }
+
+inline std::istream& operator>> (std::istream& in, QueryParams& p)
+{ p.parse_url(in); return in; }
+
+/// make QueryParams serializable
+void operator<<= (cxxtools::SerializationInfo& si, const QueryParams& p);
 
 }
 

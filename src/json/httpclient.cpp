@@ -49,55 +49,6 @@ HttpClientImpl* HttpClient::getImpl()
     return _impl;
 }
 
-HttpClient::HttpClient(SelectorBase& selector, const std::string& server,
-                       unsigned short port, const std::string& url)
-: _impl(0)
-{
-    prepareConnect(net::AddrInfo(server, port), url);
-    setSelector(selector);
-}
-
-
-HttpClient::HttpClient(SelectorBase& selector, const net::AddrInfo& addrinfo,
-                       const std::string& url)
-: _impl(0)
-{
-    setSelector(selector);
-    prepareConnect(addrinfo, url);
-}
-
-
-HttpClient::HttpClient(SelectorBase& selector, const net::Uri& uri)
-: _impl(0)
-{
-    setSelector(selector);
-    prepareConnect(net::AddrInfo(uri.host(), uri.port()), uri.path());
-    auth(uri.user(), uri.password());
-}
-
-
-HttpClient::HttpClient(const std::string& server, unsigned short port, const std::string& url)
-: _impl(0)
-{
-    prepareConnect(net::AddrInfo(server, port), url);
-}
-
-
-HttpClient::HttpClient(const net::AddrInfo& addrinfo, const std::string& url)
-: _impl(0)
-{
-    prepareConnect(addrinfo, url);
-}
-
-
-HttpClient::HttpClient(const net::Uri& uri)
-: _impl(0)
-{
-    prepareConnect(net::AddrInfo(uri.host(), uri.port()), uri.path());
-    auth(uri.user(), uri.password());
-}
-
-
 HttpClient::HttpClient(const HttpClient& other)
 : _impl(other._impl)
 {
@@ -107,6 +58,9 @@ HttpClient::HttpClient(const HttpClient& other)
 
 HttpClient& HttpClient::operator= (const HttpClient& other)
 {
+    if (_impl == other._impl)
+        return *this;
+
     if (_impl && _impl->release() <= 0)
         delete _impl;
 
@@ -124,22 +78,50 @@ HttpClient::~HttpClient()
         delete _impl;
 }
 
-void HttpClient::prepareConnect(const net::AddrInfo& addrinfo, const std::string& url)
+void HttpClient::prepareConnect(const net::AddrInfo& addrinfo, const std::string& url, bool ssl)
 {
-    getImpl()->prepareConnect(addrinfo, url);
+    getImpl()->prepareConnect(addrinfo, url, ssl);
+}
+
+void HttpClient::prepareConnect(const net::AddrInfo& addrinfo, const std::string& url, const std::string& sslCertificate)
+{
+    getImpl()->prepareConnect(addrinfo, url, sslCertificate);
+}
+
+void HttpClient::prepareConnect(const std::string& host, unsigned short int port, const std::string& url, bool ssl)
+{
+    prepareConnect(net::AddrInfo(host, port), url, ssl);
+}
+
+void HttpClient::prepareConnect(const std::string& host, unsigned short int port, const std::string& url, const std::string& sslCertificate)
+{
+    prepareConnect(net::AddrInfo(host, port), url, sslCertificate);
 }
 
 void HttpClient::prepareConnect(const net::Uri& uri)
 {
+#ifdef WITH_SSL
+    if (uri.protocol() != "http" && uri.protocol() != "https")
+        throw std::runtime_error("only protocols \"http\" and \"https\" are supported by http json rpc client");
+    prepareConnect(net::AddrInfo(uri.host(), uri.port()), uri.protocol() == "https", uri.path());
+#else
     if (uri.protocol() != "http")
-        throw std::runtime_error("only http is supported by http client");
+        throw std::runtime_error("only protocol \"http\" is supported by http json rpc client");
     prepareConnect(net::AddrInfo(uri.host(), uri.port()), uri.path());
-    auth(uri.user(), uri.password());
+#endif
 }
 
-void HttpClient::prepareConnect(const std::string& addr, unsigned short port, const std::string& url)
+void HttpClient::prepareConnect(const net::Uri& uri, const std::string& sslCertificate)
 {
-    prepareConnect(net::AddrInfo(addr, port), url);
+#ifdef WITH_SSL
+    if (uri.protocol() != "http" && uri.protocol() != "https")
+        throw std::runtime_error("only protocols http and https are supported by http json client");
+    prepareConnect(net::AddrInfo(uri.host(), uri.port()), uri.path(), sslCertificate);
+#else
+    if (uri.protocol() != "http")
+        throw std::runtime_error("only protocol \"http\" is supported by json http client");
+    prepareConnect(net::AddrInfo(uri.host(), uri.port()), uri.path());
+#endif
 }
 
 void HttpClient::connect()
@@ -162,9 +144,19 @@ void HttpClient::clearAuth()
     getImpl()->clearAuth();
 }
 
-void HttpClient::setSelector(SelectorBase& selector)
+void HttpClient::setSelector(SelectorBase* selector)
 {
     getImpl()->setSelector(selector);
+}
+
+void HttpClient::setSelector(SelectorBase& selector)
+{
+    getImpl()->setSelector(&selector);
+}
+
+void HttpClient::setSslVerify(int level, const std::string& ca)
+{
+    getImpl()->setSslVerify(level, ca);
 }
 
 void HttpClient::beginCall(IComposer& r, IRemoteProcedure& method, IDecomposer** argv, unsigned argc)
@@ -209,7 +201,7 @@ const std::string& HttpClient::url() const
 
 const IRemoteProcedure* HttpClient::activeProcedure() const
 {
-    return _impl->activeProcedure();
+    return _impl == 0 ? 0 : _impl->activeProcedure();
 }
 
 void HttpClient::cancel()

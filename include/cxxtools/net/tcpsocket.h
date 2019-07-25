@@ -32,9 +32,22 @@
 #include <cxxtools/iodevice.h>
 #include <cxxtools/net/addrinfo.h>
 #include <cxxtools/signal.h>
+#include <cxxtools/delegate.h>
+#include <cxxtools/string.h>
+#include <cxxtools/datetime.h>
 #include <string>
 
 namespace cxxtools {
+
+class SslCertificate;
+class SslCertificateNotAccepted : public std::runtime_error
+{
+public:
+    SslCertificateNotAccepted()
+        : std::runtime_error("certificate not accepted")
+        { }
+};
+
 
 namespace net {
 
@@ -85,16 +98,68 @@ class TcpSocket : public IODevice
         void endConnect();
 
         Signal<TcpSocket&> connected;
+        Signal<TcpSocket&> sslAccepted;
+        Signal<TcpSocket&> sslConnected;
+        Signal<TcpSocket&> sslClosed;
+        Delegate<bool, const SslCertificate&> acceptSslCertificate;
 
         /** @brief Notifies when the device is closed while no reading or writing is pending
          */
         Signal<TcpSocket&> closed;
  
         bool isConnected() const;
+        bool isSslConnected() const;
 
         int getFd() const;
 
         short poll(short events) const;
+
+        void loadSslCertificateFile(const std::string& certFile, const std::string& privateKeyFile = std::string());
+
+        /** Enables ssl peer certificate check.
+         *
+         *  Level 0: Disables peer certificate checking, which is the default.
+         *
+         *  Level 1: In server mode sends a client certificate request.  Verify
+         *  peer certificate and fail if not valid.  In server mode accept if
+         *  client sends no certificate.
+         *
+         *  Level 2: As level 1 but in server mode do not accept ssl connection
+         *  without client certificate.
+         *
+         *  A `ca` must be given if `level` > 0. It specifies the certification
+         *  authority file or directory.
+         *
+         *  In any case the delegate `acceptSslCertificate` is called if
+         *  connected.  If the delegate returns false, the ssl connection is
+         *  denied. A excepciton of type `cxxtools::SslCertificateNotAccepted`
+         *  is thrown.
+         */
+        void setSslVerify(int level, const std::string& ca = std::string());
+
+        bool hasSslPeerCertificate() const;
+        const SslCertificate& getSslPeerCertificate() const;
+
+        /// initiates a ssl connection on the socket
+        void beginSslConnect();
+        void endSslConnect();
+
+        /// blocking call for initiating ssl
+        void sslConnect();
+
+        /// accept a ssl connection from the peer
+        void beginSslAccept();
+        void endSslAccept();
+
+        /// blocking call to accept a ssl connection from the peer
+        void sslAccept();
+
+        /// terminates ssl
+        void beginSslShutdown();
+        void endSslShutdown();
+
+        /// blocking call to terminate ssl
+        void sslShutdown();
 
     protected:
         TcpSocket(TcpSocketImpl* impl)
@@ -102,36 +167,10 @@ class TcpSocket : public IODevice
         { }
 
         // inherit doc
-        virtual void onClose();
-
-        // inherit doc
-        virtual bool onWait(Timespan timeout);
-
-        // inherit doc
-        virtual void onAttach(SelectorBase&);
-
-        // inherit doc
-        virtual void onDetach(SelectorBase&);
-
-        // inherit doc
         virtual size_t onBeginRead(char* buffer, size_t n, bool& eof);
 
         // inherit doc
-        virtual size_t onEndRead(bool& eof);
-
-        // inherit doc
-        virtual size_t onRead(char* buffer, size_t count, bool& eof);
-
-        // inherit doc
         virtual size_t onBeginWrite(const char* buffer, size_t n);
-
-        // inherit doc
-        virtual size_t onEndWrite();
-
-        // inherit doc
-        virtual size_t onWrite(const char* buffer, size_t count);
-
-        virtual void onCancel();
 
     public:
         // inherit doc

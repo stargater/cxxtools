@@ -26,8 +26,10 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+#ifndef CXXTOOLS_POOL_H
+#define CXXTOOLS_POOL_H
+
 #include <cxxtools/smartptr.h>
-#include <cxxtools/noncopyable.h>
 #include <cxxtools/mutex.h>
 #include <vector>
 
@@ -54,8 +56,15 @@ namespace cxxtools
             typename CreatorType = DefaultCreator<ObjectType>,
             template <class> class OwnershipPolicy = RefLinked,
             template <class> class DestroyPolicy = DeletePolicy>
-  class Pool : private NonCopyable
+  class Pool
   {
+#if __cplusplus >= 201103L
+      Pool(const Pool&) = delete;
+      Pool& operator=(const Pool&) = delete;
+#else
+      Pool(const Pool&) { }
+      Pool& operator=(const Pool&) { return *this; }
+#endif
     public:
       class Ptr : public OwnershipPolicy<ObjectType>,
                   public DestroyPolicy<ObjectType>
@@ -222,3 +231,5 @@ namespace cxxtools
   };
 
 }
+
+#endif

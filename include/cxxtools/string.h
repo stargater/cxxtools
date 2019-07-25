@@ -34,7 +34,6 @@
 
 #include <string>
 #include <iterator>
-#include <stdexcept>
 #include <iosfwd>
 
 #include <cxxtools/config.h>
@@ -102,6 +101,14 @@ class basic_string< cxxtools::Char > {
 
         template <typename InputIterator>
         basic_string(InputIterator begin, InputIterator end, const allocator_type& a = allocator_type());
+
+#if __cplusplus >= 201103L
+
+        basic_string(basic_string&& str) noexcept;
+
+        basic_string& operator=(basic_string&& str);
+
+#endif
 
         ~basic_string();
 
@@ -308,6 +315,8 @@ class basic_string< cxxtools::Char > {
 //
         size_type find(cxxtools::Char ch, size_type pos = 0) const;
 
+        size_type find(wchar_t ch, size_type pos = 0) const;
+
         size_type rfind(const basic_string& str, size_type pos = npos) const;
 
         size_type rfind(const cxxtools::Char* str, size_type pos, size_type n) const;
@@ -315,6 +324,8 @@ class basic_string< cxxtools::Char > {
         size_type rfind(const cxxtools::Char* str, size_type pos = npos) const;
 
         size_type rfind(cxxtools::Char ch, size_type pos = npos) const;
+
+        size_type rfind(wchar_t ch, size_type pos = npos) const;
 
         size_type find_first_of(const basic_string& str, size_type pos = 0) const
         { return this->find_first_of( str.data(), pos, str.size() ); }

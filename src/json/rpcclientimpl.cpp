@@ -29,7 +29,6 @@
 #include "rpcclientimpl.h"
 #include <cxxtools/log.h>
 #include <cxxtools/remoteprocedure.h>
-#include <cxxtools/utf8codec.h>
 #include <cxxtools/jsonformatter.h>
 #include <cxxtools/ioerror.h>
 #include <cxxtools/clock.h>
@@ -44,13 +43,17 @@ namespace json
 
 RpcClientImpl::RpcClientImpl()
     : _stream(_socket, 8192, true),
+      _ssl(false),
+      _sslVerifyLevel(0),
       _exceptionPending(false),
       _proc(0),
+      _count(0),
       _timeout(Selectable::WaitInfinite),
       _connectTimeoutSet(false),
       _connectTimeout(Selectable::WaitInfinite)
 {
     cxxtools::connect(_socket.connected, *this, &RpcClientImpl::onConnect);
+    cxxtools::connect(_socket.sslConnected, *this, &RpcClientImpl::onSslConnect);
     cxxtools::connect(_stream.buffer().outputReady, *this, &RpcClientImpl::onOutput);
     cxxtools::connect(_stream.buffer().inputReady, *this, &RpcClientImpl::onInput);
 }
@@ -60,6 +63,13 @@ void RpcClientImpl::connect()
     _socket.setTimeout(_connectTimeout);
     _socket.close();
     _socket.connect(_addrInfo);
+    if (_ssl)
+    {
+        if (!_sslCertificate.empty())
+            _socket.loadSslCertificateFile(_sslCertificate);
+        _socket.setSslVerify(_sslVerifyLevel, _sslCa);
+        _socket.sslConnect();
+    }
 }
 
 void RpcClientImpl::close()
@@ -79,22 +89,36 @@ void RpcClientImpl::beginCall(IComposer& r, IRemoteProcedure& method, IDecompose
 
     prepareRequest(method.name(), argv, argc);
 
-    if (_socket.isConnected())
+    try
     {
-        try
+        if (_socket.isConnected())
         {
-            _stream.buffer().beginWrite();
+            try
+            {
+                _stream.buffer().beginWrite();
+            }
+            catch (const IOError&)
+            {
+                log_debug("write failed, connection is not active any more");
+                _socket.beginConnect(_addrInfo);
+            }
         }
-        catch (const IOError&)
+        else
         {
-            log_debug("write failed, connection is not active any more");
+            log_debug("not yet connected - do it now");
             _socket.beginConnect(_addrInfo);
         }
     }
-    else
+    catch (const std::exception& )
     {
-        log_debug("not yet connected - do it now");
-        _socket.beginConnect(_addrInfo);
+        IRemoteProcedure* proc = _proc;
+        cancel();
+
+        _exceptionPending = true;
+        proc->onFinished();
+
+        if (_exceptionPending)
+            throw;
     }
 
     _scanner.begin(_deserializer, r);
@@ -113,32 +137,62 @@ void RpcClientImpl::endCall()
 
 void RpcClientImpl::call(IComposer& r, IRemoteProcedure& method, IDecomposer** argv, unsigned argc)
 {
-    _proc = &method;
-
-    prepareRequest(_proc->name(), argv, argc);
-
-    if (!_socket.isConnected())
-    {
-        _socket.setTimeout(_connectTimeout);
-        _socket.connect(_addrInfo);
-    }
-
-    _socket.setTimeout(timeout());
-
     try
     {
-        _stream.flush();
+        _proc = &method;
+        StreamBuffer& sb = _stream.buffer();
+
+        if (_socket.isConnected())
+        {
+            log_debug("socket is connected");
+
+            try
+            {
+                prepareRequest(_proc->name(), argv, argc);
+                _socket.setTimeout(timeout());
+                sb.pubsync();
+
+                // try to read from socket to check if still connected
+                // sgetc fills the input buffer but do not consume the character
+                int ch = sb.sgetc();
+                if (ch == StreamBuffer::traits_type::eof())
+                {
+                    log_debug("reading failed");
+                    _socket.close();
+                }
+            }
+            catch (const std::exception& e)
+            {
+                log_debug("request failed: " << e.what());
+                _socket.close();
+            }
+        }
+
+        if (!_socket.isConnected())
+        {
+            log_debug("socket is not connected");
+            _socket.setTimeout(_connectTimeout);
+            _socket.connect(_addrInfo);
+            if (_ssl)
+            {
+                if (!_sslCertificate.empty())
+                    _socket.loadSslCertificateFile(_sslCertificate);
+                _socket.setSslVerify(_sslVerifyLevel, _sslCa);
+                _socket.sslConnect();
+            }
+
+            prepareRequest(_proc->name(), argv, argc);
+            _socket.setTimeout(timeout());
+            sb.pubsync();
+        }
 
         _scanner.begin(_deserializer, r);
-
-        StreamBuffer& sb = _stream.buffer();
 
         while (true)
         {
             int ch = sb.sbumpc();
             if (ch == StreamBuffer::traits_type::eof())
             {
-                _proc = 0;
                 cancel();
                 throw std::runtime_error("reading result failed");
             }
@@ -153,6 +207,7 @@ void RpcClientImpl::call(IComposer& r, IRemoteProcedure& method, IDecomposer** a
     }
     catch (const RemoteException&)
     {
+        _proc = 0;
         throw;
     }
     catch (const std::exception& e)
@@ -197,10 +252,9 @@ void RpcClientImpl::wait(Timespan timeout)
 
 void RpcClientImpl::prepareRequest(const String& name, IDecomposer** argv, unsigned argc)
 {
-    TextOStream ts(_stream, new Utf8Codec());
     JsonFormatter formatter;
 
-    formatter.begin(ts);
+    formatter.begin(_stream);
 
     formatter.beginObject(std::string(), std::string());
 
@@ -220,8 +274,6 @@ void RpcClientImpl::prepareRequest(const String& name, IDecomposer** argv, unsig
     formatter.finishObject();
 
     formatter.finish();
-
-    ts.flush();
 }
 
 void RpcClientImpl::onConnect(net::TcpSocket& socket)
@@ -230,8 +282,44 @@ void RpcClientImpl::onConnect(net::TcpSocket& socket)
     {
         log_trace("onConnect");
 
-        _exceptionPending = false;
         socket.endConnect();
+
+        _exceptionPending = false;
+        if (_ssl)
+        {
+            if (!_sslCertificate.empty())
+                _socket.loadSslCertificateFile(_sslCertificate);
+            _socket.setSslVerify(_sslVerifyLevel, _sslCa);
+            socket.beginSslConnect();
+            return;
+        }
+
+        _stream.buffer().beginWrite();
+    }
+    catch (const std::exception& )
+    {
+        IRemoteProcedure* proc = _proc;
+        cancel();
+
+        if (!proc)
+            throw;
+
+        _exceptionPending = true;
+        proc->onFinished();
+
+        if (_exceptionPending)
+            throw;
+    }
+}
+
+void RpcClientImpl::onSslConnect(net::TcpSocket& socket)
+{
+    try
+    {
+        log_trace("onSslConnect");
+
+        _exceptionPending = false;
+        socket.endSslConnect();
 
         _stream.buffer().beginWrite();
     }

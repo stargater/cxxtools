@@ -28,17 +28,69 @@
  */
 #include "selectorimpl.h"
 #include "cxxtools/eventloop.h"
+#include "cxxtools/mutex.h"
+#include "cxxtools/log.h"
+#include <deque>
 
-namespace cxxtools {
+log_define("cxxtools.eventloop")
 
-EventLoop::EventLoop()
-: _exitLoop(false)
+namespace cxxtools
 {
-    _selector = new SelectorImpl();
+namespace
+{
+    struct EvPtr
+    {
+        Event* ev;
+        explicit EvPtr(Event* ev_)
+            : ev(ev_)
+        { }
+
+        ~EvPtr()
+        { if (ev) ev->destroy(); }
+
+    };
 }
 
+class EventLoop::Impl
+{
+public:
+    Impl()
+        : _exitLoop(false),
+          _selector(new SelectorImpl()),
+          _eventsPerLoop(16)
+        { }
+    ~Impl();
 
-EventLoop::~EventLoop()
+    bool eventQueueEmpty()
+    { return _eventQueue.empty() && _priorityEventQueue.empty() && _activeEventQueue.empty(); }
+
+    Event* front()
+    {
+        if (_priorityEventQueue.empty())
+            return _eventQueue.front();
+        else
+            return _priorityEventQueue.front();
+    }
+
+    void pop_front()
+    {
+        if (_priorityEventQueue.empty())
+            _eventQueue.pop_front();
+        else
+            _priorityEventQueue.pop_front();
+    }
+
+    bool _exitLoop;
+    SelectorImpl* _selector;
+    std::deque<Event*> _eventQueue;
+    std::deque<Event*> _priorityEventQueue;
+    std::deque<Event*> _activeEventQueue;
+    bool _activeEventQueueIsPriority;
+    Mutex _queueMutex;
+    unsigned _eventsPerLoop;
+};
+
+EventLoop::Impl::~Impl()
 {
     try
     {
@@ -48,6 +100,22 @@ EventLoop::~EventLoop()
             _eventQueue.pop_front();
             ev->destroy();
         }
+
+        while ( ! _priorityEventQueue.empty() )
+        {
+            Event* ev = _priorityEventQueue.front();
+            _priorityEventQueue.pop_front();
+            ev->destroy();
+        }
+
+        while ( ! _activeEventQueue.empty() )
+        {
+            Event* ev = _activeEventQueue.front();
+            _activeEventQueue.pop_front();
+            if (ev)
+                ev->destroy();
+        }
+
     }
     catch(...)
     {}
@@ -55,53 +123,88 @@ EventLoop::~EventLoop()
     delete _selector;
 }
 
+EventLoop::EventLoop()
+: _impl(new Impl())
+{
+}
+
+
+EventLoop::~EventLoop()
+{
+    delete _impl;
+}
+
+unsigned EventLoop::eventsPerLoop()
+{
+    return _impl->_eventsPerLoop;
+}
+
+void EventLoop::eventsPerLoop(unsigned n)
+{
+    _impl->_eventsPerLoop = n;
+}
+
 
 void EventLoop::onAdd( Selectable& s )
 {
-    return _selector->add( s );
+    return _impl->_selector->add( s );
 }
 
 
 void EventLoop::onRemove( Selectable& s )
 {
-    _selector->remove( s );
+    _impl->_selector->remove( s );
 }
 
 
-void EventLoop::onReinit(Selectable& s)
+void EventLoop::onReinit(Selectable& /*s*/)
 {
 }
 
 
 void EventLoop::onChanged(Selectable& s)
 {
-    _selector->changed(s);
+    _impl->_selector->changed(s);
 }
 
 
 void EventLoop::onRun()
 {
-    while( true )
-    {
-        RecursiveLock lock(_queueMutex);
+    started();
 
-        if(_exitLoop)
+    while (true)
+    {
+        MutexLock lock(_impl->_queueMutex);
+
+        if (_impl->_exitLoop)
         {
-            _exitLoop = false;
+            _impl->_exitLoop = false;
             break;
         }
 
-        if( !_eventQueue.empty() )
+        bool eventQueueEmpty = _impl->eventQueueEmpty();
+        if (!eventQueueEmpty)
         {
             lock.unlock();
-            this->processEvents();
+            processEvents(_impl->_eventsPerLoop);
+            eventQueueEmpty = _impl->eventQueueEmpty();
         }
 
         lock.unlock();
 
-        bool active = this->wait( this->idleTimeout() );
-        if( ! active )
-            timeout.send();
+        if (eventQueueEmpty)
+        {
+            idle();
+
+            bool active = wait(idleTimeout());
+            if (!active)
+                timeout.send();
+        }
+        else
+        {
+            // process I/O events
+            wait(0);
+        }
     }
 
     exited();
@@ -110,14 +213,14 @@ void EventLoop::onRun()
 
 bool EventLoop::onWaitUntil(Timespan timeout)
 {
-    if( _selector->waitUntil(timeout) )
+    if (_impl->_selector->waitUntil(timeout))
     {
-        RecursiveLock lock(_queueMutex);
+        MutexLock lock(_impl->_queueMutex);
 
-        if( !_eventQueue.empty() )
+        if (!_impl->eventQueueEmpty())
         {
             lock.unlock();
-            this->processEvents();
+            processEvents(_impl->_eventsPerLoop);
         }
 
         return true;
@@ -129,66 +232,119 @@ bool EventLoop::onWaitUntil(Timespan timeout)
 
 void EventLoop::onWake()
 {
-    _selector->wake();
+    _impl->_selector->wake();
 }
 
 
 void EventLoop::onExit()
 {
-    RecursiveLock lock(_queueMutex);
-    _exitLoop = true;
-    lock.unlock();
+    log_debug("exit loop");
 
-    this->wake();
+    {
+        MutexLock lock(_impl->_queueMutex);
+        _impl->_exitLoop = true;
+    }
+
+    wake();
+}
+
+void EventLoop::onQueueEvent(const Event& ev, bool priority)
+{
+    log_debug("queue event");
+
+    MutexLock lock( _impl->_queueMutex );
+
+    EvPtr cloned(ev.clone());
+
+    if (priority)
+        _impl->_priorityEventQueue.push_back(cloned.ev);
+    else
+        _impl->_eventQueue.push_back(cloned.ev);
+
+    cloned.ev = 0;
 }
 
 
-void EventLoop::onCommitEvent(const Event& ev)
+void EventLoop::onCommitEvent(const Event& ev, bool priority)
 {
+    onQueueEvent(ev, priority);
+    _impl->_selector->wake();
+}
+
+
+void EventLoop::onProcessEvents(unsigned max)
+{
+    unsigned count = 0;
+
+    bool& exitLoop = _impl->_exitLoop;
+    std::deque<Event*>& eventQueue = _impl->_eventQueue;
+    std::deque<Event*>& priorityEventQueue = _impl->_priorityEventQueue;
+    std::deque<Event*>& activeEventQueue = _impl->_activeEventQueue;
+    bool& activeEventQueueIsPriority = _impl->_activeEventQueueIsPriority;
+    Mutex& queueMutex = _impl->_queueMutex;
+
+    log_debug("processEvents(max:" << max << ") normal/priority/active(priority): " << eventQueue.size() << '/' << priorityEventQueue.size() << '/' << activeEventQueue.size() << '(' << activeEventQueueIsPriority << ')');
+
+    if (!activeEventQueue.empty() && !activeEventQueueIsPriority)
     {
-        RecursiveLock lock( _queueMutex );
-
-        Event* clonedEvent = ev.clone();
-
-        try
+        MutexLock lock(queueMutex);
+        if (!priorityEventQueue.empty())
         {
-            _eventQueue.push_back(clonedEvent);
-        }
-        catch(...)
-        {
-            clonedEvent->destroy();
-            throw;
+            log_debug("priority events bypass active events");
+
+            if (eventQueue.empty())
+            {
+                eventQueue.swap(activeEventQueue);
+            }
+            else
+            {
+                eventQueue.insert(eventQueue.begin(), activeEventQueue.begin(), activeEventQueue.end()); 
+                activeEventQueue.clear();
+            }
+
+            priorityEventQueue.swap(activeEventQueue);
+            activeEventQueueIsPriority = true;
         }
     }
 
-    this->wake();
-}
-
-
-void EventLoop::onProcessEvents()
-{
-    while( false == _exitLoop )
+    while (!exitLoop)
     {
-        RecursiveLock lock(_queueMutex);
+        if (activeEventQueue.empty())
+        {
+            MutexLock lock(queueMutex);
+            if (!priorityEventQueue.empty())
+            {
+                log_debug("move " << priorityEventQueue.size() << " priority events to active event queue");
+                activeEventQueueIsPriority = true;
+                activeEventQueue.swap(priorityEventQueue);
+            }
+            else if (!eventQueue.empty())
+            {
+                log_debug("move " << eventQueue.size() << " events to active event queue");
+                activeEventQueueIsPriority = false;
+                activeEventQueue.swap(eventQueue);
+            }
+        }
 
-        if ( _eventQueue.empty() || _exitLoop )
+        if (exitLoop || activeEventQueue.empty())
+        {
+            log_debug_if(activeEventQueue.empty(), "no events to process");
             break;
-
-        Event* ev = _eventQueue.front();
-        _eventQueue.pop_front();
-
-        try
-        {
-            lock.unlock();
-            event.send(*ev);
-        }
-        catch(...)
-        {
-            ev->destroy();
-            throw;
         }
 
-        ev->destroy();
+        EvPtr ev(activeEventQueue.front());
+        activeEventQueue.pop_front();
+
+        ++count;
+
+        log_debug("send event " << count);
+        event.send(*ev.ev);
+
+        if (max != 0 && count >= max)
+        {
+            log_debug("maximum number of events per loop " << max << " reached");
+            break;
+        }
     }
 }
 

@@ -2,8 +2,6 @@ AUTOMAKE_OPTIONS = subdir-objects
 AM_CPPFLAGS = -I$(top_srcdir)/src -I$(top_builddir)/include -I$(top_srcdir)/include
 
 lib_LTLIBRARIES = libcxxtools.la
-include_HEADERS = \
-	dateutils.h
 
 libcxxtools_la_SOURCES = \
 	addrinfo.cpp \
@@ -15,6 +13,7 @@ libcxxtools_la_SOURCES = \
 	csvformatter.cpp \
 	csvparser.cpp \
 	char.cpp \
+	charmapcodec.cpp \
 	clock.cpp \
 	clockimpl.cpp \
 	condition.cpp \
@@ -31,6 +30,7 @@ libcxxtools_la_SOURCES = \
 	deserializer.cpp \
 	directory.cpp \
 	directoryimpl.cpp \
+	envsubst.cpp \
 	error.cpp \
 	eventloop.cpp \
 	eventsink.cpp \
@@ -43,18 +43,18 @@ libcxxtools_la_SOURCES = \
 	fileinfo.cpp \
 	formatter.cpp \
 	hdstream.cpp \
+	inideserializer.cpp \
 	inifile.cpp \
 	iniparser.cpp \
+	iniserializer.cpp \
 	iodevice.cpp \
 	iodeviceimpl.cpp \
 	ioerror.cpp \
 	iostream.cpp \
-	iso8859_1codec.cpp \
-	iso8859_15codec.cpp \
+	iso8859_codec.cpp \
 	jsondeserializer.cpp \
 	jsonformatter.cpp \
 	jsonparser.cpp \
-	jsonserializer.cpp \
 	library.cpp \
 	libraryimpl.cpp \
 	log.cpp \
@@ -69,13 +69,15 @@ libcxxtools_la_SOURCES = \
 	posix/commandinput.cpp \
 	posix/commandoutput.cpp \
 	posix/daemonize.cpp \
+	posix/fork.cpp \
 	posix/pipestream.cpp \
 	posix/posixpipe.cpp \
 	propertiesfile.cpp \
 	propertiesparser.cpp \
 	propertiesdeserializer.cpp \
+	propertiesserializer.cpp \
 	query_params.cpp \
-	quotedprintablestream.cpp \
+	quotedprintablecodec.cpp \
 	regex.cpp \
 	remoteclient.cpp \
 	selectable.cpp \
@@ -90,6 +92,8 @@ libcxxtools_la_SOURCES = \
 	serializationerror.cpp \
 	serializationinfo.cpp \
 	signal.cpp \
+	sslcertificate.cpp \
+	stddevice.cpp \
 	streambuffer.cpp \
 	string.cpp \
 	stringstream.cpp \
@@ -108,13 +112,13 @@ libcxxtools_la_SOURCES = \
 	uri.cpp \
 	utf8codec.cpp \
 	uuencode.cpp \
-	xmltag.cpp \
 	net.cpp \
 	tcpserverimpl.cpp \
 	tcpserver.cpp \
 	tcpsocket.cpp \
 	tcpsocketimpl.cpp \
 	tcpstream.cpp \
+	tz.cpp \
 	udp.cpp \
 	udpstream.cpp \
 	xml/characters.cpp \
@@ -134,6 +138,7 @@ noinst_HEADERS = \
 	applicationimpl.h \
 	clockimpl.h \
 	conditionimpl.h \
+	dateutils.h \
 	directoryimpl.h \
 	error.h \
 	facets.cpp \
@@ -150,11 +155,12 @@ noinst_HEADERS = \
 	semaphoreimpl.h \
 	settingsreader.h \
 	settingswriter.h \
+	sslcertificateimpl.h \
+	tcpserverimpl.h \
+	tcpsocketimpl.h \
 	threadimpl.h \
 	threadpoolimpl.h \
-	unicode.h \
-	tcpserverimpl.h \
-	tcpsocketimpl.h
+	unicode.h
 
 if MAKE_ICONVSTREAM
 libcxxtools_la_SOURCES += \
@@ -224,3 +230,9 @@ endif
 
 libcxxtools_la_LIBADD = $(LIBICONV)
 libcxxtools_la_LDFLAGS = -version-info @sonumber@ @SHARED_LIB_FLAG@
+
+if MAKE_OPENSSL
+libcxxtools_la_LDFLAGS += -lssl
+libcxxtools_la_SOURCES += \
+	sslcertificateimpl.cpp
+endif

@@ -28,6 +28,7 @@
 
 #include "cxxtools/unit/testsuite.h"
 #include "cxxtools/unit/registertest.h"
+#include "cxxtools/quotedprintablecodec.h"
 #include "cxxtools/quotedprintablestream.h"
 
 class QuotedPrintableTest : public cxxtools::unit::TestSuite
@@ -36,20 +37,39 @@ class QuotedPrintableTest : public cxxtools::unit::TestSuite
         QuotedPrintableTest()
             : cxxtools::unit::TestSuite("quotedprintable")
         {
-            registerMethod("testQuotedPrintable", *this, &QuotedPrintableTest::testQuotedPrintable);
+            registerMethod("encode", *this, &QuotedPrintableTest::encode);
+            registerMethod("decode", *this, &QuotedPrintableTest::decode);
+            registerMethod("stream", *this, &QuotedPrintableTest::stream);
         }
 
-        void testQuotedPrintable()
+        void encode()
+        {
+            std::string s = "H\xe4tten H\xfcte ein \xdf im Namen, w\xe4ren sie m\xfcglicherweise keine H\xfcte mehr, sondern H\xfc\xdf""e.";
+            std::string q = "H=E4tten H=FCte ein =DF im Namen, w=E4ren sie m=FCglicherweise keine H=FCte m=\r\nehr, sondern H=FC=DFe.";
+            std::string enc = cxxtools::encode<cxxtools::QuotedPrintableCodec>(s);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(enc, q);
+        }
+
+        void decode()
+        {
+            std::string s = "H\xe4tten H\xfcte ein \xdf im Namen, w\xe4ren sie m\xfcglicherweise keine H\xfcte mehr, sondern H\xfc\xdf""e.";
+            std::string q = "H=E4tten H=FCte ein =DF im Namen, w=E4ren sie m=FCglicherweise keine H=FCte m=\r\nehr, sondern H=FC=DFe.";
+            std::string dec = cxxtools::decode<cxxtools::QuotedPrintableCodec>(q);
+            CXXTOOLS_UNIT_ASSERT_EQUALS(dec, s);
+        }
+
+        void stream()
         {
             std::ostringstream s;
             cxxtools::QuotedPrintable_ostream q(s);
             q << "H\xe4tten H\xfcte ein \xdf im Namen, w\xe4ren sie m\xf6glicherweise keine H\xfcte mehr,\nsondern H\xfc\xdf" "e.";
+            q.flush();
 
             std::string qq = s.str();
 
             CXXTOOLS_UNIT_ASSERT_EQUALS(qq,
-                "H=E4tten H=FCte ein =DF im Namen, w=E4ren sie m=F6glicherweise keine H=FCte=\n"
-                " mehr,\n"
+                "H=E4tten H=FCte ein =DF im Namen, w=E4ren sie m=F6glicherweise keine H=FCte m=\r\n"
+                "ehr,\n"
                 "sondern H=FC=DFe.");
         }
 

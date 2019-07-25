@@ -45,6 +45,10 @@ class InvalidTime : public std::invalid_argument
     public:
         InvalidTime();
 
+        explicit InvalidTime(const std::string& what)
+            : std::invalid_argument(what)
+            { }
+
         ~InvalidTime() throw()
         {}
 };
@@ -68,11 +72,12 @@ class Time
         static const unsigned MSecsPerHour     = 3600000;
         static const unsigned MSecsPerMinute   = 60000;
         static const unsigned MSecsPerSecond   = 1000;
+        static const uint64_t USecsPerDay = static_cast<uint64_t>(MSecsPerDay) * 1000;
 
         /** \brief Creates a Time set to zero.
         */
         Time()
-        : _msecs(0)
+        : _usecs(0)
         {}
 
         /** \brief create Time from string using format
@@ -81,13 +86,21 @@ class Time
 
               %H   hours (0-23)
               %I   hours (0-11)
-              %M   minutes
-              %S   seconds
-              %j   milliseconds (1-3 digits, optionally leading '.')
-              %J   milliseconds (1-3 digits, with leading '.')
+              %2I  hours (00-11)
+              %M   minutes (0-59)
+              %2M  minutes (00-59)
+              %S   seconds (0-59)
+              %2S  seconds (00-59)
+              %j   fractional seconds (1-6 digits, optionally leading '.')
+              %J   fractional seconds (1-6 digits, with leading '.')
               %K   milliseconds (3 digits, with leading '.')
               %k   milliseconds (3 digits)
+              %U   microseconds (6 digits, with leading '.')
+              %u   microseconds (6 digits)
               %p   AM/PM
+              ?    arbitrary character
+              *    skip non digit characters
+              #    skip word
          */
         explicit Time(const std::string& d, const std::string& fmt = "%H:%M:%S%j");
 
@@ -95,58 +108,73 @@ class Time
 
             InvalidTime is thrown if one or more of the values are out of range
         */
-        Time(unsigned h, unsigned m, unsigned s = 0, unsigned ms = 0)
+        Time(unsigned h, unsigned m, unsigned s = 0, unsigned ms = 0, unsigned usec = 0)
         {
-            set(h, m, s, ms);
+            set(h, m, s, ms, usec);
         }
 
         /** \brief Returns the hour-part of the Time.
         */
         unsigned hour() const
         {
-            return _msecs / MSecsPerHour;
+            return unsigned(_usecs / 1000 / 1000 / 60 / 60);
         }
 
         /** \brief Returns the minute-part of the Time.
         */
         unsigned minute() const
         {
-            return (_msecs % MSecsPerHour) / MSecsPerMinute;
+            return unsigned(_usecs / 1000 / 1000 / 60) % 60;
         }
 
-        /** \brief Returns the second-part of the Time.
+        /** \brief Returns the second part of the Time.
         */
         unsigned second() const
         {
-            return (_msecs / 1000) % SecondsPerMinute;
+            return unsigned(_usecs / 1000 / 1000) % 60;
         }
 
-        /** \brief Returns the millisecond-part of the Time.
+        /** \brief Returns the millisecond part of the Time.
         */
         unsigned msec() const
         {
-            return _msecs % 1000;
+            return unsigned(_usecs / 1000) % 1000;
+        }
+
+        /** \brief Returns the microseconds of the Time.
+         *
+         *  Note that the microseconds contain the milliseconds also.
+        */
+        unsigned usec() const
+        {
+            return unsigned(_usecs % 1000000);
         }
 
         unsigned totalMSecs() const
-        { return _msecs; }
+        { return _usecs / 1000; }
+
+        uint64_t totalUSecs() const
+        { return _usecs; }
 
         void setTotalMSecs(unsigned msecs)
-        { _msecs = msecs; }
+        { _usecs = static_cast<uint64_t>(msecs) * 1000; }
+
+        void setTotalUSecs(uint64_t m)
+        { _usecs = m; }
 
         /** \brief Sets the time.
 
-            Sets the time to a new hour, minute, second, milli-second.
+            Sets the time to a new hour, minute, second, millisecond.
             InvalidTime is thrown if one or more of the values are out of range
         */
-        void set(unsigned hour, unsigned min, unsigned sec, unsigned msec = 0)
+        void set(unsigned hour, unsigned min, unsigned sec, unsigned msec = 0, unsigned usec = 0)
         {
-            if ( ! isValid(hour, min, sec , msec) )
+            if ( ! isValid(hour, min, sec, msec, usec) )
             {
                 throw InvalidTime();
             }
 
-            _msecs = (hour*SecondsPerHour + min*SecondsPerMinute + sec) * 1000 + msec;
+            _usecs = (((((static_cast<uint64_t>(hour) * 60 + min) * 60) + sec) * 1000) + msec) * 1000 + usec;
         }
 
         /** @brief Get the time values
@@ -161,145 +189,101 @@ class Time
             ms = msec();
         }
 
+        /** @brief Get the time values
+
+            Gets the hour, minute, second, millisecond and microsecond parts of the time.
+            Note that the microseconds include the millisecons.
+        */
+        void get(unsigned& h, unsigned& m, unsigned& s, unsigned& ms, unsigned& us) const
+        {
+            h = hour();
+            m = minute();
+            s = second();
+            ms = msec();
+            us = usec();
+        }
+
         /** \brief format Time into a string using a format string
 
             Valid format codes are:
 
-              %H   hours (0-23)
-              %H   hours (0-11)
-              %M   minutes
-              %S   seconds
-              %j   milliseconds (1-3 digits, optionally leading '.')
-              %J   milliseconds (1-3 digits, with leading '.')
+              %1H  hours (0-23)
+              %I   hours (00-11)
+              %1I  hours (0-11)
+              %M   minutes (00-59)
+              %1M  minutes (0-59)
+              %S   seconds (00-59)
+              %1S  seconds (0-59)
+              %j   fractional seconds (1-6 digits, optionally leading '.')
+              %J   fractional seconds (1-6 digits, with leading '.')
               %K   milliseconds (3 digits, with leading '.')
               %k   milliseconds (3 digits)
+              %U   microseconds (6 digits, with leading '.')
+              %u   microseconds (6 digits)
               %p   am/pm
               %P   AM/PM
          */
         std::string toString(const std::string& fmt = "%H:%M:%S%j") const;
 
-        /** @brief Adds seconds to the time
-
-            This method does not change the time, but returns the time
-            with the seconds added.
-        */
-        Time addSecs(int secs) const
-        {
-            return addMSecs(secs * 1000);
-        }
-
-        /** @brief Determines seconds until another time
-        */
-        int secsTo(const Time &t) const
-        {
-            return static_cast<int>( msecsTo(t) / 1000 );
-        }
-
-        /** @brief Adds milliseconds to the time
-
-            This method does not change the time, but returns the time
-            with the milliseconds added.
-        */
-        Time addMSecs(int64_t ms) const
-        {
-            Time t;
-            if (ms < 0)
-            {
-                int64_t negdays = (MSecsPerDay - ms) / MSecsPerDay;
-                t._msecs = static_cast<unsigned>((_msecs + ms + negdays * MSecsPerDay) % MSecsPerDay);
-            }
-            else
-            {
-                t._msecs = static_cast<unsigned>((_msecs + ms) % MSecsPerDay);
-            }
-
-            return t;
-        }
-
-        /** @brief Determines milliseconds until another time
-        */
-        int64_t msecsTo(const Time &t) const
-        {
-            if(t._msecs > _msecs)
-                return t._msecs - _msecs;
-
-            return MSecsPerDay - (_msecs - t._msecs);
-        }
-
         /** @brief Assignment operator
         */
         Time& operator=(const Time& other)
-        { _msecs=other._msecs; return *this; }
+        { _usecs=other._usecs; return *this; }
 
         /** @brief Equal comparison operator
         */
         bool operator==(const Time& other) const
-        { return _msecs == other._msecs; }
+        { return _usecs == other._usecs; }
 
         /** @brief Inequal comparison operator
         */
         bool operator!=(const Time& other) const
-        { return _msecs != other._msecs; }
+        { return _usecs != other._usecs; }
 
         /** @brief Less-than comparison operator
         */
         bool operator<(const Time& other) const
-        { return _msecs < other._msecs; }
+        { return _usecs < other._usecs; }
 
         /** @brief Less-than-or-equal comparison operator
         */
         bool operator<=(const Time& other) const
-        { return _msecs <= other._msecs; }
+        { return _usecs <= other._usecs; }
 
         /** @brief Greater-than comparison operator
         */
         bool operator>(const Time& other) const
-        { return _msecs > other._msecs; }
+        { return _usecs > other._usecs; }
 
         /** @brief Greater-than-or-equal comparison operator
         */
         bool operator>=(const Time& other) const
-        { return _msecs >= other._msecs; }
+        { return _usecs >= other._usecs; }
 
         /** @brief Assignment by sum operator
         */
-        Time& operator+=(const Timespan& ts)
-        {
-            int64_t msecs = ( _msecs + ts.totalUSecs() / 1000) % MSecsPerDay;
-            msecs = msecs < 0 ? MSecsPerDay + msecs : msecs;
-            _msecs = static_cast<unsigned>(msecs);
-            return *this;
-        }
+        Time& operator+=(const Timespan& ts);
 
         /** @brief Assignment by difference operator
         */
-        Time& operator-=(const Timespan& ts)
-        {
-            int64_t msecs = ( _msecs - ts.totalUSecs() / 1000) % MSecsPerDay;
-            msecs = msecs < 0 ? MSecsPerDay + msecs : msecs;
-            _msecs = static_cast<unsigned>(msecs);
-            return *this;
-        }
+        Time& operator-=(const Timespan& ts);
 
         /** @brief Addition operator
         */
-        friend Time operator+(const Time& time, const Timespan& ts)
-        {
-            return time.addMSecs( ts.totalUSecs() / 1000 );
-        }
+        friend Time operator+(const Time& time, const Timespan& ts);
 
-        /** @brief Substraction operator
+        /** @brief Subtraction operator
         */
-        friend Time operator-(const Time& time, const Timespan& ts)
-        {
-            return time.addMSecs( -ts.totalMSecs() );
-        }
+        friend Time operator-(const Time& time, const Timespan& ts);
 
-        /** @brief Substraction operator
+        /** @brief Subtraction operator
         */
         friend Timespan operator-(const Time& a, const Time& b)
         {
-            return Timespan(b.msecsTo(a) * 1000);
+            return Microseconds(
+                a._usecs >= b._usecs
+                    ? double(a._usecs - b._usecs)
+                    : -double(b._usecs - a._usecs));
         }
 
         /** \brief Returns the time in ISO-format (hh:mm:ss.hhh)
@@ -314,6 +298,13 @@ class Time
             return h < 24 && m < 60 && s < 60 && ms < 1000;
         }
 
+        /** \brief Returns true if values are a valid time
+        */
+        static bool isValid(unsigned h, unsigned m, unsigned s, unsigned ms, unsigned usec)
+        {
+            return h < 24 && m < 60 && s < 60 && ms < 1000 && usec < 1000000;
+        }
+
         /** \brief Convert from an ISO time string
 
             Interprets the passed string as a time-string in ISO-format
@@ -325,12 +316,30 @@ class Time
 
     private:
         //! @internal
-        unsigned _msecs;
+        uint64_t _usecs;
     };
 
     void operator >>=(const SerializationInfo& si, Time& time);
 
     void operator <<=(SerializationInfo& si, const Time& time);
+
+    /** @brief Addition operator
+    */
+    inline Time operator+(const Time& time, const Timespan& ts)
+    {
+        Time t(time);
+        t += ts;
+        return t;
+    }
+
+    /** @brief Subtraction operator
+    */
+    inline Time operator-(const Time& time, const Timespan& ts)
+    {
+        Time t(time);
+        t -= ts;
+        return t;
+    }
 
 }
 

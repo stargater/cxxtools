@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 Tommi Maekitalo
+ * Copyright (C) 2015 Tommi Maekitalo
  * 
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -26,59 +26,50 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-#include "cxxtools/iso8859_1codec.h"
+#include <iostream>
+#include <cxxtools/arg.h>
+#include <cxxtools/net/tcpstream.h>
+#include <cxxtools/xml/xml.h>
+#include <cxxtools/xml/xmlerror.h>
+#include "msg.h"
 
-namespace cxxtools
+int main(int argc, char* argv[])
 {
+  try
+  {
+    cxxtools::Arg<std::string> ip(argc, argv, 'i');
+    cxxtools::Arg<unsigned short> port(argc, argv, 'p', 7010);
 
-Iso8859_1Codec::result Iso8859_1Codec::do_in(MBState& s, const char* fromBegin, const char* fromEnd, const char*& fromNext,
-                                   Char* toBegin, Char* toEnd, Char*& toNext) const
-{
-    fromNext  = fromBegin;
-    toNext = toBegin;
-    while (fromNext < fromEnd && toNext < toEnd)
+    // We instantiate a network iostream and connect to a server
+    cxxtools::net::TcpStream inp(ip, port);
+
+    cxxtools::xml::XmlDeserializer deserializer;
+
+    // Xml must be read with a XmlReader to prevent, that data is lost
+    // in the input stream between messages.
+    cxxtools::xml::XmlReader xmlreader(inp);
+
+    // Read messages until we get a XmlNoDocument exception.
+    Msg msg;
+    while (true)
     {
-        *toNext = Char(static_cast<unsigned char>(*fromNext));
-        ++fromNext;
-        ++toNext;
+      try
+      {
+        deserializer.parse(xmlreader);
+      }
+      catch (const cxxtools::xml::XmlNoDocument&)
+      {
+        break;
+      }
+
+      deserializer.deserialize(msg);
+      std::cout << msg.value << '\t' << msg.str << std::endl;
+      deserializer.clear();
     }
-
-    return ok;
+  }
+  catch (const std::exception& e)
+  {
+    std::cerr << e.what() << std::endl;
+  }
 }
 
-
-Iso8859_1Codec::result Iso8859_1Codec::do_out(MBState& s, const Char* fromBegin, const Char* fromEnd, const Char*& fromNext,
-                                                  char* toBegin, char* toEnd, char*& toNext) const
-{
-    fromNext  = fromBegin;
-    toNext = toBegin;
-    while (fromNext < fromEnd && toNext < toEnd)
-    {
-        *toNext = fromNext->narrow();
-        ++fromNext;
-        ++toNext;
-    }
-
-    return ok;
-}
-
-
-int Iso8859_1Codec::do_length(MBState& s, const char* fromBegin, const char* fromEnd, size_t max) const
-{
-    return max;
-}
-
-
-int Iso8859_1Codec::do_max_length() const throw()
-{
-    return 1;
-}
-
-
-bool Iso8859_1Codec::do_always_noconv() const throw()
-{
-    return false;
-}
-
-
-} // namespace cxxtools

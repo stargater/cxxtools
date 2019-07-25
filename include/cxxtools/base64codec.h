@@ -29,7 +29,6 @@
 #define cxxtools_Base64Codec_h
 
 #include <cxxtools/textcodec.h>
-#include <cxxtools/string.h>
 
 namespace cxxtools
 {
@@ -37,9 +36,7 @@ namespace cxxtools
 class Base64Codec : public TextCodec<char, char>
 {
     public:
-        explicit Base64Codec(size_t ref = 0)
-        : TextCodec<char, char>(ref)
-        {}
+        explicit Base64Codec(size_t ref = 0);
 
         virtual ~Base64Codec()
         {}
@@ -71,7 +68,7 @@ class Base64Codec : public TextCodec<char, char>
             return false;
         }
 
-        int do_length(MBState& s, const char* fromBegin,
+        int do_length(MBState& /*s*/, const char* fromBegin,
                       const char* fromEnd, size_t max) const
         {
             const int from = (fromEnd - fromBegin) / 4;
@@ -91,7 +88,20 @@ class Base64Codec : public TextCodec<char, char>
             return 4;
         }
 
+    private:
+        unsigned _maxcol;
+        std::string _lineend;
+        bool _padding;
+
     public:
+        unsigned maxcol() const             { return _maxcol; }
+        const std::string& lineend() const  { return _lineend; }
+        bool padding() const                { return _padding; }
+
+        void maxcol(unsigned m)             { _maxcol = m; }
+        void lineend(const std::string& l)  { _lineend = l; }
+        void padding(bool p)                { _padding = p; }
+
         /** @brief shortcut for converting base64 encoded data to std::string
 
             Example:

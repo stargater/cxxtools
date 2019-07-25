@@ -39,7 +39,8 @@ class IRemoteResult
 {
     public:
         IRemoteResult()
-            : _failed(false)
+            : _failed(false),
+              _rc(0)
             { }
 
         void setFault(int rc, const std::string& msg)
@@ -85,24 +86,31 @@ class RemoteResult : public IRemoteResult
         {
         }
 
+        const R& value() const
+        {
+            return _result;
+        }
+
         R& value()
         {
             return _result;
         }
 
+#if __cplusplus >= 201103L
+        R&& get()
+        {
+            _client->endCall();
+            checkFault();
+            return std::move(_result);
+        }
+#else
         R& get()
         {
             _client->endCall();
             checkFault();
             return _result;
         }
-
-        const R& get() const
-        {
-            _client->endCall();
-            checkFault();
-            return _result;
-        }
+#endif
 
         RemoteClient& client()   { return *_client; }
 

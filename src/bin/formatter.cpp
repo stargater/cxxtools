@@ -60,6 +60,23 @@ namespace
     {
         return v >> bits << bits != v;
     }
+
+    static const char bcd[257] = "                " // 00-0f
+                                 "                " // 10-1f
+                                 "\xe          \xa \xb\xc " // 20-2f
+                                 "\x0\x1\x2\x3\x4\x5\x6\x7\x8\x9\xd     " // 30-3f
+                                 "                " // 40-4f
+                                 "                " // 50-5f
+                                 "                " // 60-6f
+                                 "                " // 70-7f
+                                 "                " // 80-8f
+                                 "                " // 90-9f
+                                 "                " // a0-af
+                                 "                " // b0-bf
+                                 "                " // c0-cf
+                                 "                " // d0-df
+                                 "                " // e0-ef
+                                 "                "; // f0-ff
 }
 
 Formatter::Formatter()
@@ -84,6 +101,9 @@ void Formatter::begin(std::ostream& out)
 
 void Formatter::finish()
 {
+    _ts.detach();
+    _dictionary.clear();
+    _out = 0;
 }
 
 void Formatter::addValueString(const std::string& name, const std::string& type,
@@ -94,9 +114,10 @@ void Formatter::addValueString(const std::string& name, const std::string& type,
     bool plain = name.empty();
     std::streambuf* sb = _out->rdbuf();
 
-    if (type == "int")
+    if (type == "int"
+     || type == "long")
     {
-        if (value.size() > 0 && (value[0] == L'-' || value[0] == L'+'))
+        if (!value.empty() && (value[0] == L'-' || value[0] == L'+'))
         {
             int64_t v = convert<int64_t>(value);
             printInt(v, name);
@@ -107,26 +128,14 @@ void Formatter::addValueString(const std::string& name, const std::string& type,
             printUInt(v, name);
         }
     }
-    else if (type == "double")
+    else if (value.find_first_not_of(L"0123456789+-.: ") == std::string::npos
+        || value == L"nan" || value == L"inf" || value == L"-inf")
     {
-        static const char d[257] = "                " // 00-0f
-                                   "                " // 10-1f
-                                   "           \xa \xb\xc " // 20-2f
-                                   "\x0\x1\x2\x3\x4\x5\x6\x7\x8\x9      " // 30-3f
-                                   "                " // 40-4f
-                                   "                " // 50-5f
-                                   "     \xe          " // 60-6f
-                                   "                " // 70-7f
-                                   "                " // 80-8f
-                                   "                " // 90-9f
-                                   "                " // a0-af
-                                   "                " // b0-bf
-                                   "                " // c0-cf
-                                   "                " // d0-df
-                                   "                " // e0-ef
-                                   "                "; // f0-ff
-
-        sb->sputc(static_cast<char>(plain ? Serializer::TypePlainBcdFloat : Serializer::TypeBcdFloat));
+        bool isDouble = (type == "double");
+        sb->sputc(static_cast<char>(isDouble ? plain ? Serializer::TypePlainBcdFloat : Serializer::TypeBcdFloat
+                                             : plain ? Serializer::TypePlainBcd : Serializer::TypeBcd));
+        if (!isDouble)
+            outputString(type);
 
         if (!plain)
             outputString(name);
@@ -151,17 +160,17 @@ void Formatter::addValueString(const std::string& name, const std::string& type,
             {
                 int v = it->value();
                 if (high)
-                    ch = d[v] << 4;
+                    ch = bcd[v] << 4;
                 else
                 {
-                    ch |= d[v];
+                    ch |= bcd[v];
                     sb->sputc(ch);
                 }
                 high = !high;
             }
 
             if (!high)
-                sb->sputc(static_cast<char>(ch | '\xd'));
+                sb->sputc(static_cast<char>(ch | '\xf'));
         }
 
         sb->sputc('\xff');
@@ -174,6 +183,32 @@ void Formatter::addValueString(const std::string& name, const std::string& type,
             outputString(name);
 
         sb->sputc((isTrue(value) ? '\1' : '\0'));
+    }
+    else if (value.find(L'\0') != cxxtools::String::npos)
+    {
+        std::string svalue = Utf8Codec::encode(value);
+        uint32_t v = svalue.size();
+        if (v <= 0xffff)
+        {
+            sb->sputc(static_cast<char>(plain ? Serializer::TypePlainBinary2 : Serializer::TypeBinary2));
+
+            if (!plain)
+                outputString(name);
+        }
+        else
+        {
+            sb->sputc(static_cast<char>(plain ? Serializer::TypePlainBinary4 : Serializer::TypeBinary4));
+
+            if (!plain)
+                outputString(name);
+
+            sb->sputc(static_cast<char>(v >> 24));
+            sb->sputc(static_cast<char>(v >> 16));
+        }
+
+        sb->sputc(static_cast<char>(v >> 8));
+        sb->sputc(static_cast<char>(v));
+        *_out << svalue;
     }
     else
     {
@@ -196,9 +231,10 @@ void Formatter::addValueStdString(const std::string& name, const std::string& ty
     bool plain = name.empty();
     std::streambuf* sb = _out->rdbuf();
 
-    if (type == "int")
+    if (type == "int"
+     || type == "long")
     {
-        if (value.size() > 0 && (value[0] == L'-' || value[0] == L'+'))
+        if (!value.empty() && (value[0] == L'-' || value[0] == L'+'))
         {
             int64_t v = convert<int64_t>(value);
             printInt(v, name);
@@ -209,26 +245,14 @@ void Formatter::addValueStdString(const std::string& name, const std::string& ty
             printUInt(v, name);
         }
     }
-    else if (type == "double")
+    else if (value.find_first_not_of("0123456789+-.: ") == std::string::npos
+        || value == "nan" || value == "inf" || value == "-inf")
     {
-        static const char d[257] = "                " // 00-0f
-                                   "                " // 10-1f
-                                   "           \xa \xb\xc " // 20-2f
-                                   "\x0\x1\x2\x3\x4\x5\x6\x7\x8\x9      " // 30-3f
-                                   "                " // 40-4f
-                                   "                " // 50-5f
-                                   "     \xe          " // 60-6f
-                                   "                " // 70-7f
-                                   "                " // 80-8f
-                                   "                " // 90-9f
-                                   "                " // a0-af
-                                   "                " // b0-bf
-                                   "                " // c0-cf
-                                   "                " // d0-df
-                                   "                " // e0-ef
-                                   "                "; // f0-ff
-
-        sb->sputc(static_cast<char>(plain ? Serializer::TypePlainBcdFloat : Serializer::TypeBcdFloat));
+        bool isDouble = (type == "double");
+        sb->sputc(static_cast<char>(isDouble ? plain ? Serializer::TypePlainBcdFloat : Serializer::TypeBcdFloat
+                                             : plain ? Serializer::TypePlainBcd : Serializer::TypeBcd));
+        if (!isDouble)
+            outputString(type);
 
         if (!plain)
             outputString(name);
@@ -253,17 +277,17 @@ void Formatter::addValueStdString(const std::string& name, const std::string& ty
             {
                 int v = (*it);
                 if (high)
-                    ch = d[v] << 4;
+                    ch = bcd[v] << 4;
                 else
                 {
-                    ch |= d[v];
+                    ch |= bcd[v];
                     sb->sputc(ch);
                 }
                 high = !high;
             }
 
             if (!high)
-                sb->sputc(static_cast<char>(ch | '\xd'));
+                sb->sputc(static_cast<char>(ch | '\xf'));
         }
 
         sb->sputc('\xff');
@@ -316,6 +340,21 @@ void Formatter::addValueStdString(const std::string& name, const std::string& ty
 
 }
 
+void Formatter::addValueChar(const std::string& name, const std::string& type,
+                         char value)
+{
+    log_trace("addValueChar(\"" << name << "\", \"" << type << "\", " << value << ')');
+
+    bool plain = name.empty();
+    std::streambuf* sb = _out->rdbuf();
+
+    sb->sputc(static_cast<char>(plain ? Serializer::TypePlainChar : Serializer::TypeChar));
+
+    if (!plain)
+        outputString(name);
+
+    sb->sputc(value);
+}
 void Formatter::addValueBool(const std::string& name, const std::string& type,
                          bool value)
 {
@@ -347,9 +386,219 @@ void Formatter::addValueUnsigned(const std::string& name, const std::string& typ
 }
 
 void Formatter::addValueFloat(const std::string& name, const std::string& type,
-                      long double value)
+                      float value)
 {
     log_trace("addValueFloat(\"" << name << "\", \"" << type << "\", " << value << ')');
+
+    std::streambuf* sb = _out->rdbuf();
+
+    if (value != value)
+    {
+        // NaN
+        sb->sputc(static_cast<char>(name.empty() ? Serializer::TypePlainShortFloat : Serializer::TypeShortFloat));
+        if (!name.empty())
+            outputString(name);
+        sb->sputn("\x7f\x1\0", 3);
+    }
+    else if (value == std::numeric_limits<float>::infinity())
+    {
+        sb->sputc(static_cast<char>(name.empty() ? Serializer::TypePlainShortFloat : Serializer::TypeShortFloat));
+        if (!name.empty())
+            outputString(name);
+        sb->sputn("\x7f\0\0", 3);
+    }
+    else if (value == -std::numeric_limits<float>::infinity())
+    {
+        sb->sputc(static_cast<char>(name.empty() ? Serializer::TypePlainShortFloat : Serializer::TypeShortFloat));
+        if (!name.empty())
+            outputString(name);
+        sb->sputn("\xff\0\0", 3);
+    }
+    else if (value == 0.0)
+    {
+        log_debug("value is zero");
+        sb->sputc(static_cast<char>(name.empty() ? Serializer::TypePlainShortFloat : Serializer::TypeShortFloat));
+        if (!name.empty())
+            outputString(name);
+        sb->sputn("\0\0\0", 3);
+    }
+    else
+    {
+        bool isNeg = value < 0;
+        int exp;
+        float s = frexpf(isNeg ? -value : value, &exp);
+        uint64_t m = static_cast<uint64_t>((std::numeric_limits<uint64_t>::max() + 1.0l) * (s * 2.0l - 1.0l));
+        if (m < 5 && s > .9)
+        {
+            // this must be an overflow, which may happen when long double has a very high resolution
+            m = std::numeric_limits<uint64_t>::max();
+        }
+
+        log_debug("value=" << value << " s=" << s << " man=" << std::hex << m << std::dec << " exp=" << exp << " neg=" << isNeg);
+
+        if (areLowerBitsSet(m, 32) || exp > 63 || exp < -63)
+        {
+            log_debug("output long float");
+
+            uint16_t e = exp + 16383;
+            if (isNeg)
+                e |= 0x8000;
+            sb->sputc(static_cast<char>(name.empty() ? Serializer::TypePlainLongFloat : Serializer::TypeLongFloat));
+            if (!name.empty())
+                outputString(name);
+            sb->sputc(static_cast<char>(e >> 8));
+            sb->sputc(static_cast<char>(e));
+            sb->sputc(static_cast<char>(m >> 56));
+            sb->sputc(static_cast<char>(m >> 48));
+            sb->sputc(static_cast<char>(m >> 40));
+            sb->sputc(static_cast<char>(m >> 32));
+            sb->sputc(static_cast<char>(m >> 24));
+            sb->sputc(static_cast<char>(m >> 16));
+            sb->sputc(static_cast<char>(m >> 8));
+            sb->sputc(static_cast<char>(m));
+        }
+        else if (areLowerBitsSet(m, 48))
+        {
+            log_debug("output medium float");
+
+            uint16_t e = exp + 63;
+            if (isNeg)
+                e |= 0x80;
+            sb->sputc(static_cast<char>(name.empty() ? Serializer::TypePlainMediumFloat : Serializer::TypeMediumFloat));
+            if (!name.empty())
+                outputString(name);
+            sb->sputc(static_cast<char>(e));
+            sb->sputc(static_cast<char>(m >> 56));
+            sb->sputc(static_cast<char>(m >> 48));
+            sb->sputc(static_cast<char>(m >> 40));
+            sb->sputc(static_cast<char>(m >> 32));
+        }
+        else
+        {
+            log_debug("output short float");
+
+            uint8_t e = exp + 63;
+            if (isNeg)
+                e |= 0x80;
+            sb->sputc(static_cast<char>(name.empty() ? Serializer::TypePlainShortFloat : Serializer::TypeShortFloat));
+            if (!name.empty())
+                outputString(name);
+            sb->sputc(static_cast<char>(e));
+            sb->sputc(static_cast<char>(m >> 56));
+            sb->sputc(static_cast<char>(m >> 48));
+        }
+    }
+}
+
+void Formatter::addValueDouble(const std::string& name, const std::string& type,
+                      double value)
+{
+    log_trace("addValueDouble(\"" << name << "\", \"" << type << "\", " << value << ')');
+
+    std::streambuf* sb = _out->rdbuf();
+
+    if (value != value)
+    {
+        // NaN
+        sb->sputc(static_cast<char>(name.empty() ? Serializer::TypePlainShortFloat : Serializer::TypeShortFloat));
+        if (!name.empty())
+            outputString(name);
+        sb->sputn("\x7f\x1\0", 3);
+    }
+    else if (value == std::numeric_limits<double>::infinity())
+    {
+        sb->sputc(static_cast<char>(name.empty() ? Serializer::TypePlainShortFloat : Serializer::TypeShortFloat));
+        if (!name.empty())
+            outputString(name);
+        sb->sputn("\x7f\0\0", 3);
+    }
+    else if (value == -std::numeric_limits<double>::infinity())
+    {
+        sb->sputc(static_cast<char>(name.empty() ? Serializer::TypePlainShortFloat : Serializer::TypeShortFloat));
+        if (!name.empty())
+            outputString(name);
+        sb->sputn("\xff\0\0", 3);
+    }
+    else if (value == 0.0)
+    {
+        log_debug("value is zero");
+        sb->sputc(static_cast<char>(name.empty() ? Serializer::TypePlainShortFloat : Serializer::TypeShortFloat));
+        if (!name.empty())
+            outputString(name);
+        sb->sputn("\0\0\0", 3);
+    }
+    else
+    {
+        bool isNeg = value < 0;
+        int exp;
+        double s = frexp(isNeg ? -value : value, &exp);
+        uint64_t m = static_cast<uint64_t>((std::numeric_limits<uint64_t>::max() + 1.0l) * (s * 2.0l - 1.0l));
+        if (m < 5 && s > .9)
+        {
+            // this must be an overflow, which may happen when long double has a very high resolution
+            m = std::numeric_limits<uint64_t>::max();
+        }
+
+        log_debug("value=" << value << " s=" << s << " man=" << std::hex << m << std::dec << " exp=" << exp << " neg=" << isNeg);
+
+        if (areLowerBitsSet(m, 32) || exp > 63 || exp < -63)
+        {
+            log_debug("output long float");
+
+            uint16_t e = exp + 16383;
+            if (isNeg)
+                e |= 0x8000;
+            sb->sputc(static_cast<char>(name.empty() ? Serializer::TypePlainLongFloat : Serializer::TypeLongFloat));
+            if (!name.empty())
+                outputString(name);
+            sb->sputc(static_cast<char>(e >> 8));
+            sb->sputc(static_cast<char>(e));
+            sb->sputc(static_cast<char>(m >> 56));
+            sb->sputc(static_cast<char>(m >> 48));
+            sb->sputc(static_cast<char>(m >> 40));
+            sb->sputc(static_cast<char>(m >> 32));
+            sb->sputc(static_cast<char>(m >> 24));
+            sb->sputc(static_cast<char>(m >> 16));
+            sb->sputc(static_cast<char>(m >> 8));
+            sb->sputc(static_cast<char>(m));
+        }
+        else if (areLowerBitsSet(m, 48))
+        {
+            log_debug("output medium float");
+
+            uint16_t e = exp + 63;
+            if (isNeg)
+                e |= 0x80;
+            sb->sputc(static_cast<char>(name.empty() ? Serializer::TypePlainMediumFloat : Serializer::TypeMediumFloat));
+            if (!name.empty())
+                outputString(name);
+            sb->sputc(static_cast<char>(e));
+            sb->sputc(static_cast<char>(m >> 56));
+            sb->sputc(static_cast<char>(m >> 48));
+            sb->sputc(static_cast<char>(m >> 40));
+            sb->sputc(static_cast<char>(m >> 32));
+        }
+        else
+        {
+            log_debug("output short float");
+
+            uint8_t e = exp + 63;
+            if (isNeg)
+                e |= 0x80;
+            sb->sputc(static_cast<char>(name.empty() ? Serializer::TypePlainShortFloat : Serializer::TypeShortFloat));
+            if (!name.empty())
+                outputString(name);
+            sb->sputc(static_cast<char>(e));
+            sb->sputc(static_cast<char>(m >> 56));
+            sb->sputc(static_cast<char>(m >> 48));
+        }
+    }
+}
+
+void Formatter::addValueLongDouble(const std::string& name, const std::string& type,
+                      long double value)
+{
+    log_trace("addValueLongDouble(\"" << name << "\", \"" << type << "\", " << value << ')');
 
     std::streambuf* sb = _out->rdbuf();
 
@@ -387,7 +636,7 @@ void Formatter::addValueFloat(const std::string& name, const std::string& type,
     {
         bool isNeg = value < 0;
         int exp;
-        long double s = frexp(isNeg ? -value : value, &exp);
+        long double s = frexpl(isNeg ? -value : value, &exp);
         uint64_t m = static_cast<uint64_t>((std::numeric_limits<uint64_t>::max() + 1.0l) * (s * 2.0l - 1.0l));
         if (m < 5 && s > .9)
         {
@@ -467,13 +716,13 @@ void Formatter::addNull(const std::string& name, const std::string& type)
 
 void Formatter::beginArray(const std::string& name, const std::string& type)
 {
-    log_trace("beginArray(\"" << name << "\", \"" << type << ')');
+    log_trace("beginArray(\"" << name << "\", \"" << type << "\")");
 
     std::streambuf* sb = _out->rdbuf();
 
     sb->sputc(static_cast<char>(Serializer::CategoryArray));
     outputString(name);
-    printTypeCode(type, name.empty());
+    printTypeCode(type, true);
 }
 
 void Formatter::finishArray()
@@ -487,7 +736,7 @@ void Formatter::finishArray()
 
 void Formatter::beginObject(const std::string& name, const std::string& type)
 {
-    log_trace("beginObject(\"" << name << "\", \"" << type << ')');
+    log_trace("beginObject(\"" << name << "\", \"" << type << "\")");
 
     std::streambuf* sb = _out->rdbuf();
 
@@ -498,7 +747,7 @@ void Formatter::beginObject(const std::string& name, const std::string& type)
 
 void Formatter::beginMember(const std::string& name)
 {
-    log_trace("beginMember(\"" << name << ')');
+    log_trace("beginMember(\"" << name << "\")");
 }
 
 void Formatter::finishMember()
@@ -519,9 +768,7 @@ void Formatter::printTypeCode(const std::string& type, bool plain)
 {
     std::streambuf* sb = _out->rdbuf();
 
-    if (type.empty())
-        sb->sputc(static_cast<char>(plain ? Serializer::TypePlainEmpty : Serializer::TypeEmpty));
-    else if (type == "bool")
+    if (type == "bool")
         sb->sputc(static_cast<char>(plain ? Serializer::TypePlainBool : Serializer::TypeBool));
     else if (type == "char")
         sb->sputc(static_cast<char>(plain ? Serializer::TypePlainChar : Serializer::TypeChar));
@@ -663,6 +910,7 @@ void Formatter::outputString(const std::string& value)
     {
         if (_dictionary[idx] == value)
         {
+            log_debug("use dictionary value \"" << value << "\" idx=" << idx);
             sb->sputc('\1');
             sb->sputc(static_cast<char>(idx >> 8));
             sb->sputc(static_cast<char>(idx));

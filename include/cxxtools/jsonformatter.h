@@ -30,7 +30,7 @@
 #define CXXTOOLS_JSONFORMATTER_H
 
 #include <cxxtools/formatter.h>
-#include <cxxtools/textstream.h>
+#include <iosfwd>
 
 namespace cxxtools
 {
@@ -38,23 +38,25 @@ namespace cxxtools
     {
         public:
             JsonFormatter()
-                : _ts(0),
+                : _os(0),
                   _level(1),
                   _lastLevel(0),
-                  _beautify(false)
+                  _beautify(false),
+                  _plainkey(false)
             {
             }
 
-            explicit JsonFormatter(std::basic_ostream<cxxtools::Char>& ts)
-                : _ts(0),
+            explicit JsonFormatter(std::ostream& out)
+                : _os(0),
                   _level(1),
                   _lastLevel(0),
-                  _beautify(false)
+                  _beautify(false),
+                  _plainkey(false)
             {
-                begin(ts);
+                begin(out);
             }
 
-            void begin(std::basic_ostream<cxxtools::Char>& ts);
+            void begin(std::ostream& out);
 
             void finish();
 
@@ -74,6 +76,12 @@ namespace cxxtools
                                   unsigned_type value);
 
             virtual void addValueFloat(const std::string& name, const std::string& type,
+                                  float value);
+
+            virtual void addValueDouble(const std::string& name, const std::string& type,
+                                  double value);
+
+            virtual void addValueLongDouble(const std::string& name, const std::string& type,
                                   long double value);
 
             virtual void addNull(const std::string& name, const std::string& type);
@@ -94,6 +102,10 @@ namespace cxxtools
 
             void beautify(bool sw)    { _beautify = sw; }
 
+            bool plainkey() const     { return _plainkey; }
+
+            void plainkey(bool sw)    { _plainkey = sw; }
+
             void beginValue(const std::string& name);
 
             void finishValue();
@@ -103,10 +115,11 @@ namespace cxxtools
             void stringOut(const std::string& str);
             void stringOut(const cxxtools::String& str);
 
-            std::basic_ostream<cxxtools::Char>* _ts;
+            std::ostream* _os;
             unsigned _level;
             unsigned _lastLevel;
             bool _beautify;
+            bool _plainkey;
     };
 
 }

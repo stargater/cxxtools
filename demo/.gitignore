@@ -1,11 +1,13 @@
 arg
 arg-set
 cgi
+commandoutput
 cxxlog
 deserialization
 dir
 dlloader
 execLs
+future
 getini
 hd
 httprequest
@@ -17,6 +19,8 @@ logbench
 logsh
 md5sum
 mime
+mimeextract
+msgclient
 multifstream
 netcat
 netio
@@ -36,3 +40,7 @@ timer
 thread
 threadpool
 uuencode
+xmlreader
+msgserver
+xmlmsgclient
+xmlmsgserver

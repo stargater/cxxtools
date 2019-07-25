@@ -31,6 +31,7 @@
 
 #include <cxxtools/serializationinfo.h>
 #include <vector>
+#include <iosfwd>
 
 namespace cxxtools
 {
@@ -42,17 +43,24 @@ class Deserializer;
 
 class Parser
 {
+#if __cplusplus >= 201103L
+        Parser(const Parser&) = delete;
+        Parser& operator= (const Parser&) = delete;
+#else
         Parser(const Parser&) { }
         Parser& operator= (const Parser&) { return *this; }
+#endif
 
         explicit Parser(std::vector<std::string>* dictionary)
-            : _next(0),
+            : _deserializer(0),
+              _next(0),
               _dictionary(dictionary)
         { }
 
     public:
         Parser()
-            : _next(0),
+            : _deserializer(0),
+              _next(0),
               _dictionary(&_mydictionary)
         { }
 
@@ -61,11 +69,13 @@ class Parser
             delete _next;
         }
 
-        void begin(Deserializer& handler);
+        void begin(Deserializer& handler, bool resetDictionary = true);
+
+        void finish();
 
         void skip();
 
-        bool advance(char ch); // returns true, if number is read completely
+        bool advance(std::streambuf& in, bool atLeastOne = false); // returns true, if value is complete
 
     private:
 
@@ -81,10 +91,14 @@ class Parser
             state_value_type_other,
             state_value_type_other_idx0,
             state_value_type_other_idx1,
+            state_value_type_bcd,
+            state_value_type_bcd_idx0,
+            state_value_type_bcd_idx1,
             state_value_intsign,
             state_value_int,
             state_value_uint,
             state_value_bool,
+            state_value_char,
             state_value_bcd0,
             state_value_bcd,
             state_value_binary_length,

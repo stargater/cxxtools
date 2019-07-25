@@ -35,71 +35,89 @@
 #define _cxxtools_log_enabled(impl, level)   \
   (getLogger ## impl() != 0 && getLogger ## impl()->isEnabled(::cxxtools::Logger::level))
 
-#define _cxxtools_log(impl, level, expr)   \
+#define _cxxtools_log(impl, level, displaylevel, expr)   \
   do { \
     ::cxxtools::Logger* _cxxtools_logger = getLogger ## impl(); \
     if (_cxxtools_logger != 0 && _cxxtools_logger->isEnabled(::cxxtools::Logger::level)) \
     { \
-      ::cxxtools::LogMessage _cxxtools_logMessage(_cxxtools_logger, #level); \
+      ::cxxtools::LogMessage _cxxtools_logMessage(_cxxtools_logger, displaylevel); \
       _cxxtools_logMessage.out() << expr; \
       _cxxtools_logMessage.finish(); \
     } \
   } while (false)
 
-#define _cxxtools_log_if(impl, level, cond, expr)   \
+#define _cxxtools_log_if(impl, level, displaylevel, cond, expr)   \
   do { \
     ::cxxtools::Logger* _cxxtools_logger = getLogger ## impl(); \
     if (_cxxtools_logger != 0 && _cxxtools_logger->isEnabled(::cxxtools::Logger::level) && (cond)) \
     { \
-      ::cxxtools::LogMessage _cxxtools_logMessage(_cxxtools_logger, #level); \
+      ::cxxtools::LogMessage _cxxtools_logMessage(_cxxtools_logger, displaylevel); \
       _cxxtools_logMessage.out() << expr; \
       _cxxtools_logMessage.finish(); \
     } \
   } while (false)
 
-#define log_fatal_enabled()     _cxxtools_log_enabled(_default, FATAL)
-#define log_error_enabled()     _cxxtools_log_enabled(_default, ERROR)
-#define log_warn_enabled()      _cxxtools_log_enabled(_default, WARN)
-#define log_info_enabled()      _cxxtools_log_enabled(_default, INFO)
-#define log_debug_enabled()     _cxxtools_log_enabled(_default, DEBUG)
-#define log_trace_enabled()     _cxxtools_log_enabled(_default, TRACE)
+#define log_fatal_enabled()     _cxxtools_log_enabled(_default, LOG_FATAL)
+#define log_error_enabled()     _cxxtools_log_enabled(_default, LOG_ERROR)
+#define log_warn_enabled()      _cxxtools_log_enabled(_default, LOG_WARN)
+#define log_info_enabled()      _cxxtools_log_enabled(_default, LOG_INFO)
+#define log_debug_enabled()     _cxxtools_log_enabled(_default, LOG_DEBUG)
+#define log_fine_enabled()      _cxxtools_log_enabled(_default, LOG_FINE)
+#define log_finer_enabled()     _cxxtools_log_enabled(_default, LOG_FINER)
+#define log_finest_enabled()    _cxxtools_log_enabled(_default, LOG_FINEST)
+#define log_trace_enabled()     _cxxtools_log_enabled(_default, LOG_TRACE)
 
-#define log_fatal_to_enabled(impl)     _cxxtools_log_enabled(impl, FATAL)
-#define log_error_to_enabled(impl)     _cxxtools_log_enabled(impl, ERROR)
-#define log_warn_to_enabled(impl)      _cxxtools_log_enabled(impl, WARN)
-#define log_info_to_enabled(impl)      _cxxtools_log_enabled(impl, INFO)
-#define log_debug_to_enabled(impl)     _cxxtools_log_enabled(impl, DEBUG)
-#define log_trace_to_enabled(impl)     _cxxtools_log_enabled(impl, TRACE)
+#define log_fatal_to_enabled(impl)     _cxxtools_log_enabled(impl, LOG_FATAL)
+#define log_error_to_enabled(impl)     _cxxtools_log_enabled(impl, LOG_ERROR)
+#define log_warn_to_enabled(impl)      _cxxtools_log_enabled(impl, LOG_WARN)
+#define log_info_to_enabled(impl)      _cxxtools_log_enabled(impl, LOG_INFO)
+#define log_debug_to_enabled(impl)     _cxxtools_log_enabled(impl, LOG_DEBUG)
+#define log_fine_to_enabled(impl)      _cxxtools_log_enabled(impl, LOG_FINE)
+#define log_finer_to_enabled(impl)     _cxxtools_log_enabled(impl, LOG_FINER)
+#define log_finest_to_enabled(impl)    _cxxtools_log_enabled(impl, LOG_FINEST)
+#define log_trace_to_enabled(impl)     _cxxtools_log_enabled(impl, LOG_TRACE)
 
-#define log_fatal(expr)     _cxxtools_log(_default, FATAL, expr)
-#define log_error(expr)     _cxxtools_log(_default, ERROR, expr)
-#define log_warn(expr)      _cxxtools_log(_default, WARN, expr)
-#define log_info(expr)      _cxxtools_log(_default, INFO, expr)
-#define log_debug(expr)     _cxxtools_log(_default, DEBUG, expr)
+#define log_fatal(expr)     _cxxtools_log(_default, LOG_FATAL, "FATAL", expr)
+#define log_error(expr)     _cxxtools_log(_default, LOG_ERROR, "ERROR", expr)
+#define log_warn(expr)      _cxxtools_log(_default, LOG_WARN, "WARN", expr)
+#define log_info(expr)      _cxxtools_log(_default, LOG_INFO, "INFO", expr)
+#define log_debug(expr)     _cxxtools_log(_default, LOG_DEBUG, "DEBUG", expr)
+#define log_fine(expr)      _cxxtools_log(_default, LOG_FINE, "FINE", expr)
+#define log_finer(expr)     _cxxtools_log(_default, LOG_FINER, "FINER", expr)
+#define log_finest(expr)    _cxxtools_log(_default, LOG_FINEST, "FINEST", expr)
 
-#define log_fatal_to(impl, expr)     _cxxtools_log(impl, FATAL, expr)
-#define log_error_to(impl, expr)     _cxxtools_log(impl, ERROR, expr)
-#define log_warn_to(impl, expr)      _cxxtools_log(impl, WARN, expr)
-#define log_info_to(impl, expr)      _cxxtools_log(impl, INFO, expr)
-#define log_debug_to(impl, expr)     _cxxtools_log(impl, DEBUG, expr)
+#define log_fatal_to(impl, expr)     _cxxtools_log(impl, LOG_FATAL, "FATAL", expr)
+#define log_error_to(impl, expr)     _cxxtools_log(impl, LOG_ERROR, "ERROR", expr)
+#define log_warn_to(impl, expr)      _cxxtools_log(impl, LOG_WARN, "WARN", expr)
+#define log_info_to(impl, expr)      _cxxtools_log(impl, LOG_INFO, "INFO", expr)
+#define log_debug_to(impl, expr)     _cxxtools_log(impl, LOG_DEBUG, "DEBUG", expr)
+#define log_fine_to(impl, expr)      _cxxtools_log(impl, LOG_FINE, "FINE", expr)
+#define log_finer_to(impl, expr)     _cxxtools_log(impl, LOG_FINER, "FINER", expr)
+#define log_finest_to(impl, expr)    _cxxtools_log(impl, LOG_FINEST, "FINEST", expr)
 
-#define log_fatal_if(cond, expr)     _cxxtools_log_if(_default, FATAL, cond, expr)
-#define log_error_if(cond, expr)     _cxxtools_log_if(_default, ERROR, cond, expr)
-#define log_warn_if(cond, expr)      _cxxtools_log_if(_default, WARN, cond, expr)
-#define log_info_if(cond, expr)      _cxxtools_log_if(_default, INFO, cond, expr)
-#define log_debug_if(cond, expr)     _cxxtools_log_if(_default, DEBUG, cond, expr)
+#define log_fatal_if(cond, expr)     _cxxtools_log_if(_default, LOG_FATAL, "FATAL", cond, expr)
+#define log_error_if(cond, expr)     _cxxtools_log_if(_default, LOG_ERROR, "ERROR", cond, expr)
+#define log_warn_if(cond, expr)      _cxxtools_log_if(_default, LOG_WARN, "WARN", cond, expr)
+#define log_info_if(cond, expr)      _cxxtools_log_if(_default, LOG_INFO, "INFO", cond, expr)
+#define log_debug_if(cond, expr)     _cxxtools_log_if(_default, LOG_DEBUG, "DEBUG", cond, expr)
+#define log_fine_if(cond, expr)      _cxxtools_log_if(_default, LOG_FINE, "FINE", cond, expr)
+#define log_finer_if(cond, expr)     _cxxtools_log_if(_default, LOG_FINER, "FINER", cond, expr)
+#define log_finest_if(cond, expr)    _cxxtools_log_if(_default, LOG_FINEST, "FINEST", cond, expr)
 
-#define log_fatal_to_if(impl, cond, expr)     _cxxtools_log_if(impl, FATAL, cond, expr)
-#define log_error_to_if(impl, cond, expr)     _cxxtools_log_if(impl, ERROR, cond, expr)
-#define log_warn_to_if(impl, cond, expr)      _cxxtools_log_if(impl, WARN, cond, expr)
-#define log_info_to_if(impl, cond, expr)      _cxxtools_log_if(impl, INFO, cond, expr)
-#define log_debug_to_if(impl, cond, expr)     _cxxtools_log_if(impl, DEBUG, cond, expr)
+#define log_fatal_to_if(impl, cond, expr)     _cxxtools_log_if(impl, LOG_FATAL, "FATAL", cond, expr)
+#define log_error_to_if(impl, cond, expr)     _cxxtools_log_if(impl, LOG_ERROR, "ERROR", cond, expr)
+#define log_warn_to_if(impl, cond, expr)      _cxxtools_log_if(impl, LOG_WARN, "WARN", cond, expr)
+#define log_info_to_if(impl, cond, expr)      _cxxtools_log_if(impl, LOG_INFO, "INFO", cond, expr)
+#define log_debug_to_if(impl, cond, expr)     _cxxtools_log_if(impl, LOG_DEBUG, "DEBUG", cond, expr)
+#define log_fine_to_if(impl, cond, expr)      _cxxtools_log_if(impl, LOG_FINE, "FINE", cond, expr)
+#define log_finer_to_if(impl, cond, expr)     _cxxtools_log_if(impl, LOG_FINER, "FINER", cond, expr)
+#define log_finest_to_if(impl, cond, expr)    _cxxtools_log_if(impl, LOG_FINEST, "FINEST", cond, expr)
 
 #define log_trace_to(impl, expr)     \
   ::cxxtools::LogTracer _cxxtools_tracer;  \
   do { \
     ::cxxtools::Logger* _cxxtools_logger = getLogger ## impl(); \
-    if (_cxxtools_logger != 0 && _cxxtools_logger->isEnabled(::cxxtools::Logger::TRACE)) \
+    if (_cxxtools_logger != 0 && _cxxtools_logger->isEnabled(::cxxtools::Logger::LOG_TRACE)) \
     { \
       _cxxtools_tracer.setLogger(_cxxtools_logger); \
       _cxxtools_tracer.out() << expr;  \
@@ -133,36 +151,54 @@ namespace cxxtools
   //
   class Logger
   {
-    public:
-      typedef enum {
-        FATAL = 0,
-        ERROR = 100,
-        WARN  = 200,
-        INFO  = 300,
-        DEBUG = 400,
-        TRACE = 500
-      } log_level_type;
-
-    private:
-      std::string category;
-      log_level_type level;
-
       Logger(const Logger&);
       Logger& operator=(const Logger&);
 
     public:
-      Logger(const std::string& c, log_level_type l)
-        : category(c), level(l)
+      enum log_flag_type {
+        LOG_FATAL  = 0x01,
+        LOG_ERROR  = 0x02,
+        LOG_WARN   = 0x04,
+        LOG_INFO   = 0x08,
+        LOG_DEBUG  = 0x10,
+        LOG_FINE   = 0x10,
+        LOG_FINER  = 0x20,
+        LOG_FINEST = 0x40,
+        LOG_TRACE  = 0x80
+      };
+
+      enum log_level_type {
+        LOG_LEVEL_FATAL  = (LOG_FATAL << 1) - 1,
+        LOG_LEVEL_ERROR  = (LOG_ERROR << 1) - 1,
+        LOG_LEVEL_WARN   = (LOG_WARN << 1) - 1,
+        LOG_LEVEL_INFO   = (LOG_INFO << 1) - 1,
+        LOG_LEVEL_DEBUG  = (LOG_DEBUG << 1) - 1,
+        LOG_LEVEL_FINE   = (LOG_FINE << 1) - 1,
+        LOG_LEVEL_FINER  = (LOG_FINER << 1) - 1,
+        LOG_LEVEL_FINEST = (LOG_FINEST << 1) - 1,
+        LOG_LEVEL_TRACE  = LOG_LEVEL_DEBUG | LOG_TRACE
+      };
+
+    private:
+      std::string category;
+      int flags;
+
+    public:
+      /// Initalizes a new logger.
+      Logger(const std::string& c, int f)
+        : category(c), flags(f)
         { }
 
-      bool isEnabled(log_level_type l) const
-        { return level >= l; }
       const std::string& getCategory() const
         { return category; }
+      bool isEnabled(log_flag_type l) const
+        { return (flags & l) != 0; }
       log_level_type getLogLevel() const
-        { return level; }
-      void setLogLevel(log_level_type level_)
-        { level = level_; }
+        { return static_cast<log_level_type>(flags); }
+      int getLogFlags() const
+        { return flags; }
+      void setLogFlags(int f)
+        { flags = f; }
   };
 
   //////////////////////////////////////////////////////////////////////
@@ -177,6 +213,37 @@ namespace cxxtools
       Impl* _impl;
 
     public:
+      /**
+       Converts a complex log level string to log_level_type.
+       Throws exception when level string could not be interpreted
+
+       accepted log levels:
+
+        * everything below level:
+            FATAL
+            ERROR
+            WARN
+            INFO
+            DEBUG
+            FINE
+            FINER
+            FINEST
+            TRACE
+
+        * everything below level with trace enabled:
+            TFATAL
+            ...
+            TFINE
+
+        * specific log levels:
+            TRACE|ERROR|WARN
+
+        * just one log level:
+            |WARN
+
+       */
+      static int strToLogFlags(const std::string& level);
+
       typedef Logger::log_level_type log_level_type;
 
       LogConfiguration();
@@ -188,12 +255,26 @@ namespace cxxtools
       Impl* impl()             { return _impl; }
       const Impl* impl() const { return _impl; }
 
-      log_level_type rootLevel() const;
-      log_level_type logLevel(const std::string& category) const;
+      int rootFlags() const;
+      int logFlags(const std::string& category) const;
 
       // setter
-      void setRootLevel(log_level_type level);
-      void setLogLevel(const std::string& category, log_level_type level);
+      void setRootFlags(int flags);
+      void setRootLevel(log_level_type level)
+        { setRootFlags(static_cast<int>(level)); }
+      /// Sets root level using string notation.
+      /// See method strToLogFlags for syntax of string.
+      void setRootLevel(const std::string& level)
+        { setRootFlags(strToLogFlags(level)); }
+
+      void setLogFlags(const std::string& category, int flags);
+      void setLogLevel(const std::string& category, log_level_type level)
+        { setLogFlags(category, static_cast<int>(level)); };
+      /// Sets specific level using string notation.
+      /// See method strToLogFlags for syntax of string.
+      /// Empty level removes the specific setting for the category.
+      void setLogLevel(const std::string& category, const std::string& level);
+
       void setFile(const std::string& fname);
       void setFile(const std::string& fname, unsigned maxfilesize, unsigned maxbackupindex);
       void setLoghost(const std::string& host, unsigned short port, bool broadcast = false);
@@ -238,9 +319,11 @@ namespace cxxtools
       Logger* getLogger(const std::string& category);
       static bool isEnabled()
       { return _enabled; }
+      static void disable()
+      { _enabled = false; }
 
-      Logger::log_level_type rootLevel() const;
-      Logger::log_level_type logLevel(const std::string& category) const;
+      int rootFlags() const;
+      int logFlags(const std::string& category) const;
   };
 
   //////////////////////////////////////////////////////////////////////

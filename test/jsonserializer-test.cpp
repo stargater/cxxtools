@@ -29,6 +29,8 @@
 #include "cxxtools/unit/testsuite.h"
 #include "cxxtools/unit/registertest.h"
 #include "cxxtools/jsonserializer.h"
+#include "cxxtools/json.h"
+#include "cxxtools/timespan.h"
 
 namespace
 {
@@ -56,6 +58,23 @@ namespace
         si.addMember("nullValue");
     }
 
+    // test object for plain key test
+    struct PlainKeyObject
+    {
+        int a;
+        int b;
+        int c;
+        int d;
+    };
+
+    inline void operator<<= (cxxtools::SerializationInfo& si, const PlainKeyObject& obj)
+    {
+        si.addMember("a a") <<= obj.a;
+        si.addMember("1b") <<= obj.b;
+        si.addMember("c-c") <<= obj.c;
+        si.addMember("ddd") <<= obj.d;
+    }
+
     struct JsonData
     {
         int a;
@@ -70,6 +89,14 @@ namespace
       jsi.setTypeName("json");
     }
 
+    template <typename T>
+    std::string toJson(const T& t)
+    {
+        std::ostringstream out;
+        cxxtools::JsonSerializer serializer(out);
+        serializer.serialize(t).finish();
+        return out.str();
+    }
 }
 
 class JsonSerializerTest : public cxxtools::unit::TestSuite
@@ -91,6 +118,9 @@ class JsonSerializerTest : public cxxtools::unit::TestSuite
             registerMethod("testPlainEmpty", *this, &JsonSerializerTest::testPlainEmpty);
             registerMethod("testEmptyObject", *this, &JsonSerializerTest::testEmptyObject);
             registerMethod("testDirect", *this, &JsonSerializerTest::testDirect);
+            registerMethod("testEasyJson", *this, &JsonSerializerTest::testEasyJson);
+            registerMethod("testPlainkey", *this, &JsonSerializerTest::testPlainkey);
+            registerMethod("testTimespan", *this, &JsonSerializerTest::testTimespan);
         }
 
         void testInt()
@@ -261,6 +291,91 @@ class JsonSerializerTest : public cxxtools::unit::TestSuite
 
             CXXTOOLS_UNIT_ASSERT_EQUALS(out.str(), "{\"a\":42,\"jsonData\":{ b: 17; c: \"Hi there\" }}");
 
+        }
+
+        void testEasyJson()
+        {
+            TestObject data;
+            data.intValue = 17;
+            data.stringValue = "foobar";
+            data.doubleValue = 1.5;
+            data.boolValue = false;
+
+            std::ostringstream out;
+            out << cxxtools::Json(data);
+
+            CXXTOOLS_UNIT_ASSERT_EQUALS(out.str(), "{"
+                "\"intValue\":17,"
+                "\"stringValue\":\"foobar\","
+                "\"doubleValue\":1.5,"
+                "\"boolValue\":false,"
+                "\"nullValue\":null"
+                "}");
+        }
+
+        void testPlainkey()
+        {
+            {
+                TestObject data;
+                data.intValue = 17;
+                data.stringValue = "foobar";
+                data.doubleValue = 1.5;
+                data.boolValue = false;
+
+                std::ostringstream out;
+                out << cxxtools::Json(data).plainkey(true);
+
+                CXXTOOLS_UNIT_ASSERT_EQUALS(out.str(), "{"
+                    "intValue:17,"
+                    "stringValue:\"foobar\","
+                    "doubleValue:1.5,"
+                    "boolValue:false,"
+                    "nullValue:null"
+                    "}");
+            }
+
+            {
+                PlainKeyObject o;
+                o.a = 1;
+                o.b = 2;
+                o.c = 3;
+                o.d = 4;
+
+                std::ostringstream out;
+                out << cxxtools::Json(o).plainkey(true);
+
+                CXXTOOLS_UNIT_ASSERT_EQUALS(out.str(), "{"
+                    "\"a a\":1,"
+                    "\"1b\":2,"
+                    "\"c-c\":3,"
+                    "ddd:4}");
+            }
+        }
+
+        void testTimespan()
+        {
+            std::string j;
+            
+            j = toJson(cxxtools::Microseconds(34));
+            CXXTOOLS_UNIT_ASSERT_EQUALS(j, "34");
+
+            j = toJson(cxxtools::Milliseconds(124));
+            CXXTOOLS_UNIT_ASSERT_EQUALS(j, "124");
+
+            j = toJson(cxxtools::Seconds(3456));
+            CXXTOOLS_UNIT_ASSERT_EQUALS(j, "3456");
+
+            j = toJson(cxxtools::Seconds(cxxtools::Microseconds(34565432)));
+            CXXTOOLS_UNIT_ASSERT_EQUALS(j, "34.565432");
+
+            j = toJson(cxxtools::Seconds(34, 565477));
+            CXXTOOLS_UNIT_ASSERT_EQUALS(j, "34.565477");
+
+            j = toJson(cxxtools::Minutes(18));
+            CXXTOOLS_UNIT_ASSERT_EQUALS(j, "18");
+
+            j = toJson(cxxtools::Hours(67));
+            CXXTOOLS_UNIT_ASSERT_EQUALS(j, "67");
         }
 };
 

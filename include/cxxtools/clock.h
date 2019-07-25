@@ -46,15 +46,15 @@ class Clock
 
         Clock(const Clock& cl);
 
-        const Clock& operator=(const Clock& cl);
+        Clock& operator=(const Clock& cl);
 
         /** @brief Destructor
         */
         virtual ~Clock();
 
-        /** @brief Start the clock
+        /** @brief Start the clock and return the current system ticks.
         */
-        void start();
+        Timespan start();
 
         /** @brief Stop the clock. Can be called several times.
 
@@ -66,11 +66,11 @@ class Clock
 
         /** @brief Returns the system time
         */
-        static DateTime getSystemTime();
+        static UtcDateTime getSystemTime();
 
         /** @brief Returns the current local time
         */
-        static DateTime getLocalTime();
+        static LocalDateTime getLocalTime();
 
         /** @brief Returns the timespan since a fixed point in the past
 
